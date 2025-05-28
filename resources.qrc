@@ -1,0 +1,49 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <!-- Images -->
+    <file alias="images/logo.png">app/resources/images/logo.png</file>
+    
+    <!-- Icons -->
+    <file alias="icons/add_checkin.png">app/resources/icons/add_checkin.png</file>
+    <file alias="icons/arrivals.png">app/resources/icons/arrivals.png</file>
+    <file alias="icons/available_rooms.png">app/resources/icons/available_rooms.png</file>
+    <file alias="icons/booking.png">app/resources/icons/booking.png</file>
+    <file alias="icons/calendar_96px.png">app/resources/icons/calendar_96px.png</file>
+    <file alias="icons/checkin.png">app/resources/icons/checkin.png</file>
+    <file alias="icons/checkins-list.png">app/resources/icons/checkins-list.png</file>
+    <file alias="icons/dashboard.png">app/resources/icons/dashboard.png</file>
+    <file alias="icons/departures.png">app/resources/icons/departures.png</file>
+    <file alias="icons/down.png">app/resources/icons/down.png</file>
+    <file alias="icons/dropdown.png">app/resources/icons/dropdown.png</file>
+    <file alias="icons/guests.png">app/resources/icons/guests.png</file>
+    <file alias="icons/occupancy.png">app/resources/icons/occupancy.png</file>
+    <file alias="icons/password.png">app/resources/icons/password.png</file>
+    <file alias="icons/person_96px.png">app/resources/icons/person_96px.png</file>
+    <file alias="icons/reports.png">app/resources/icons/reports.png</file>
+    <file alias="icons/revenue_month.png">app/resources/icons/revenue_month.png</file>
+    <file alias="icons/revenue_today.png">app/resources/icons/revenue_today.png</file>
+    <file alias="icons/room_96px.png">app/resources/icons/room_96px.png</file>
+    <file alias="icons/settings.png">app/resources/icons/settings.png</file>
+    <file alias="icons/star.png">app/resources/icons/star.png</file>
+    <file alias="icons/up.png">app/resources/icons/up.png</file>
+    
+    <!-- Reservation Section Icons -->
+    <file alias="icons/list.png">app/resources/icons/list.png</file>
+    <file alias="icons/calendar.png">app/resources/icons/calendar.png</file>
+    <file alias="icons/add_booking.png">app/resources/icons/add_booking.png</file>
+    <file alias="icons/cancel.png">app/resources/icons/cancel.png</file>
+    
+    <!-- Legacy aliases for backward compatibility -->
+    <file alias="icons/login.png">app/resources/icons/checkin.png</file>
+    <file alias="icons/user.png">app/resources/icons/person_96px.png</file>
+    <file alias="icons/reservation.png">app/resources/icons/booking.png</file>
+    <file alias="icons/checkout.png">app/resources/icons/checkins-list.png</file>
+    <file alias="icons/add_user.png">app/resources/icons/add_checkin.png</file>
+    <file alias="icons/edit_user.png">app/resources/icons/settings.png</file>
+    <file alias="icons/delete_user.png">app/resources/icons/down.png</file>
+    <file alias="icons/vip.png">app/resources/icons/star.png</file>
+    <file alias="icons/notes.png">app/resources/icons/reports.png</file>
+    <file alias="icons/history.png">app/resources/icons/reports.png</file>
+    <file alias="icons/down_arrow.png">app/resources/icons/down.png</file>
+</qresource>
+</RCC>

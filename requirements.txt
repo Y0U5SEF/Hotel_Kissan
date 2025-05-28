@@ -1,0 +1,3 @@
+PyQt6==6.5.0
+PyQt6-Charts==6.5.0
+PyQt6-QScintilla==6.5.0

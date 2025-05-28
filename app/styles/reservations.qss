@@ -1,0 +1,86 @@
+/* Reservations Section Styles */
+
+QWidget {
+    background-color: #f5f6fa;
+    color: #2c3e50;
+}
+
+#pageTitle {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2c3e50;
+    padding: 10px 0;
+}
+
+QLineEdit, QComboBox, QDateEdit {
+    padding: 8px 12px;
+    border: 2px solid #dcdde1;
+    border-radius: 6px;
+    background-color: white;
+    font-size: 14px;
+}
+
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+    border-color: #e67e22;
+}
+
+QPushButton {
+    padding: 8px 16px;
+    background-color: #e67e22;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #ca6f1e;
+}
+
+QPushButton:pressed {
+    background-color: #b65c0b;
+}
+
+QTableWidget {
+    background-color: white;
+    border: 1px solid #dcdde1;
+    border-radius: 6px;
+    gridline-color: #f1f2f6;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid #f1f2f6;
+}
+
+QTableWidget::item:selected {
+    background-color: #e67e22;
+    color: white;
+}
+
+QHeaderView::section {
+    background-color: #f8f9fa;
+    padding: 8px;
+    border: none;
+    border-bottom: 2px solid #dcdde1;
+    font-weight: bold;
+}
+
+QTabWidget::pane {
+    border: 1px solid #dcdde1;
+    border-radius: 6px;
+    background-color: white;
+}
+
+QTabBar::tab {
+    background-color: #f8f9fa;
+    padding: 8px 16px;
+    margin-right: 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+QTabBar::tab:selected {
+    background-color: white;
+    border-bottom: 2px solid #e67e22;
+} 

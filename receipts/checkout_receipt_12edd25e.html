@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hotel Checkout Invoice</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+        .invoice-container {
+            max-width: 210mm;
+            width: 100%;
+            background-color: #ffffff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        @media (max-width: 768px) {
+            .invoice-container {
+                padding: 1.5rem;
+            }
+            th, td {
+                padding: 0.5rem 0.75rem;
+            }
+            .grid-cols-2-responsive {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 480px) {
+            .invoice-container {
+                padding: 1rem;
+                border-radius: 0.5rem;
+            }
+            .text-3xl {
+                font-size: 2rem;
+            }
+            .text-lg {
+                font-size: 1.125rem;
+            }
+            .text-base {
+                font-size: 0.95rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-gray-200 mb-6">
+            <div class="mb-4 sm:mb-0">
+                <h1 class="text-3xl font-bold text-gray-800 mb-1">Grand Oasis Hotel</h1>
+                <p class="text-sm text-gray-600">123 Palm Avenue, Marrakesh, Morocco</p>
+                <p class="text-sm text-gray-600">Phone: +212 524 42 00 00 | Email: info@grandoasis.com</p>
+            </div>
+            <div class="flex-shrink-0">
+                <img src="https://placehold.co/100x100/A78BFA/FFFFFF?text=LOGO" alt="Hotel Logo" class="h-24 w-24 rounded-full object-cover">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">Invoice Details:</h2>
+                <p class="text-sm text-gray-600"><span class="font-medium">Invoice No:</span> INV-12edd25e</p>
+                <p class="text-sm text-gray-600"><span class="font-medium">Invoice Date:</span> May 28, 2025</p>
+                <p class="text-sm text-gray-600"><span class="font-medium">Check-out Date:</span> 2025-05-28</p>
+            </div>
+            <div>
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">Billed To:</h2>
+                <p class="text-sm text-gray-600"><span class="font-medium">Client Name:</span> ROSIE PRESTON</p>
+                <p class="text-sm text-gray-600"><span class="font-medium">Room:</span> Single #2</p>
+                <p class="text-sm text-gray-600"><span class="font-medium">Check-in Date:</span> 2025-05-27</p>
+            </div>
+        </div>
+
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">Room Charges (Nights)</h2>
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Room Type</th>
+                        <th>Nights</th>
+                        <th>Price/Night</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Single #2</td>
+                        <td>1</td>
+                        <td>MAD 1400.00</td>
+                        <td>MAD 1400.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">Additional Services</h2>
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>Beer</td>
+                        <td>3</td>
+                        <td>MAD 50.00</td>
+                        <td>MAD 150.00</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex justify-end mt-6">
+            <div class="w-full sm:w-1/2 md:w-1/3">
+                <div class="flex justify-between items-center py-2 border-b border-gray-200">
+                    <span class="text-gray-700 font-medium">Subtotal:</span>
+                    <span class="text-gray-800 font-semibold">MAD 1550.00</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b border-gray-200">
+                    <span class="text-gray-700 font-medium">Tax (10%):</span>
+                    <span class="text-gray-800 font-semibold">MAD 155.00</span>
+                </div>
+                <div class="flex justify-between items-center py-3">
+                    <span class="text-xl font-bold text-gray-800">Total Due:</span>
+                    <span class="text-xl font-bold text-indigo-600">MAD 1705.00</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 pt-6 border-t border-gray-200 text-center">
+            <p class="text-sm text-gray-600 mb-2">Payment is due upon receipt. We accept cash, credit card, and bank transfers.</p>
+            <p class="text-sm text-gray-600">Thank you for choosing Grand Oasis Hotel. We hope to see you again soon!</p>
+        </div>
+    </div>
+</body>
+</html>
