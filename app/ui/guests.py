@@ -30,17 +30,18 @@ class GuestProfileDialog(QDialog):
         basic_info_layout.addWidget(basic_info_label)
         
         form_layout = QFormLayout()
+
+        # Last Name
+        self.last_name = QLineEdit()
+        self.last_name.setObjectName("uppercase")
+        self.last_name.setPlaceholderText("Enter last name")
+        form_layout.addRow("Last Name *:", self.last_name)
         
         # First Name
         self.first_name = QLineEdit()
         self.first_name.setObjectName("uppercase")
         self.first_name.setPlaceholderText("Enter first name")
         form_layout.addRow("First Name *:", self.first_name)
-        
-        # Last Name
-        self.last_name = QLineEdit()
-        self.last_name.setPlaceholderText("Enter last name")
-        form_layout.addRow("Last Name *:", self.last_name)
         
         # ID Type
         self.id_type = QComboBox()
@@ -49,6 +50,7 @@ class GuestProfileDialog(QDialog):
         
         # ID Number
         self.id_number = QLineEdit()
+        self.id_number.setObjectName("uppercase")
         self.id_number.setPlaceholderText("Enter ID number")
         form_layout.addRow("ID Number:", self.id_number)
         

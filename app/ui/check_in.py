@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, QSize, pyqtSignal, QMutex
 from PyQt6.QtGui import QIcon, QPixmap
-from app.core.db import get_all_guests, get_all_rooms, update_room, get_guest_id_by_name, insert_checkin, get_all_checkins, update_checkin, get_booking_services, get_total_booking_charges, get_room_rates
+from app.core.db import get_all_guests, get_all_rooms, update_room, get_guest_id_by_name, insert_checkin, get_all_checkins, update_checkin, get_booking_services, get_total_booking_charges, get_room_rates, get_tax_rates # Import get_tax_rates
 from app.ui.dialogs.add_extra_charge import AddExtraChargeDialog
 import uuid
 from datetime import datetime
@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants
-TAX_RATE = Decimal('0.10')  # 10% tax rate
+# TAX_RATE = Decimal('0.10') # This constant is no longer directly used for calculation
 ROOM_GRID_COLS = 5
 MIN_NIGHTS = 1
 MAX_NIGHTS = 30
@@ -181,6 +181,7 @@ class CheckInWidget(QWidget):
             self.load_room_grid() # Ensure room grid is fresh when starting new check-in
         elif tab_name == "Check-out":
             self.load_checked_in_guests()
+            self.populate_tax_options() # Populate tax options when entering checkout tab
 
 
     def setup_checkin_list_tab(self):
@@ -731,8 +732,36 @@ class CheckInWidget(QWidget):
         payment_label.setObjectName("sectionTitle")
         payment_layout.addWidget(payment_label)
         
-        # Payment details
-        payment_form = QFormLayout()
+        # Payment method with modern dropdown
+        method_widget = QWidget()
+        method_layout = QHBoxLayout(method_widget)
+        method_label = QLabel("Payment Method:")
+        self.checkout_payment_method = QComboBox()
+        self.checkout_payment_method.addItems(["Cash", "Credit Card", "Debit Card", "Mobile Payment"])
+        method_layout.addWidget(method_label)
+        method_layout.addWidget(self.checkout_payment_method)
+        payment_layout.addWidget(method_widget)
+        
+        # Tax selection
+        tax_select_widget = QWidget()
+        tax_select_layout = QHBoxLayout(tax_select_widget)
+        tax_select_layout.setContentsMargins(0, 0, 0, 0)
+        tax_select_layout.addWidget(QLabel("Select Tax:"))
+        self.checkout_tax_select = QComboBox()
+        self.populate_tax_options() # Populate tax options
+        self.checkout_tax_select.currentIndexChanged.connect(self.update_checkout_total)
+        tax_select_layout.addWidget(self.checkout_tax_select)
+        tax_select_layout.addStretch()
+        payment_layout.addWidget(tax_select_widget)
+
+        self.selected_tax_display = QLabel("No tax selected")
+        self.selected_tax_display.setStyleSheet("font-style: italic; color: #555;")
+        payment_layout.addWidget(self.selected_tax_display)
+
+        # Amount details
+        amounts_widget = QWidget()
+        amounts_layout = QFormLayout(amounts_widget)
+        amounts_layout.setSpacing(15)
         
         self.checkout_room_charges = QLineEdit()
         self.checkout_room_charges.setReadOnly(True)
@@ -742,22 +771,11 @@ class CheckInWidget(QWidget):
         self.checkout_additional_charges.setReadOnly(True)
         self.checkout_additional_charges.setObjectName("readOnlyInput")
         
-        # Add tax checkbox and amount
-        tax_widget = QWidget()
-        tax_layout = QHBoxLayout(tax_widget)
-        tax_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.checkout_apply_tax = QCheckBox("Apply Tax")
-        self.checkout_apply_tax.setChecked(True)  # Default to checked
-        self.checkout_apply_tax.stateChanged.connect(self.update_checkout_total)
-        
-        self.checkout_tax_amount = QLineEdit()
-        self.checkout_tax_amount.setReadOnly(True)
-        self.checkout_tax_amount.setObjectName("readOnlyInput")
-        self.checkout_tax_amount.setText("0.00")
-        
-        tax_layout.addWidget(self.checkout_apply_tax)
-        tax_layout.addWidget(self.checkout_tax_amount)
+        # Tax amount display (no longer a checkbox)
+        self.checkout_tax_amount_display = QLineEdit() # Renamed from checkout_tax_amount
+        self.checkout_tax_amount_display.setReadOnly(True)
+        self.checkout_tax_amount_display.setObjectName("readOnlyInput")
+        self.checkout_tax_amount_display.setText("0.00")
         
         self.checkout_total_amount = QLineEdit()
         self.checkout_total_amount.setReadOnly(True)
@@ -771,24 +789,30 @@ class CheckInWidget(QWidget):
         self.checkout_amount_due.setReadOnly(True)
         self.checkout_amount_due.setObjectName("readOnlyInput")
         
-        payment_form.addRow("Room Charges:", self.checkout_room_charges)
-        payment_form.addRow("Additional Charges:", self.checkout_additional_charges)
-        payment_form.addRow("Tax:", tax_widget)
-        payment_form.addRow("Total Amount:", self.checkout_total_amount)
-        payment_form.addRow("Amount Paid:", self.checkout_amount_paid)
-        payment_form.addRow("Amount Due:", self.checkout_amount_due)
+        amounts_layout.addRow("Room Charges:", self.checkout_room_charges)
+        amounts_layout.addRow("Additional Charges:", self.checkout_additional_charges)
+        amounts_layout.addRow("Tax Amount:", self.checkout_tax_amount_display) # Updated label
+        amounts_layout.addRow("Total Amount:", self.checkout_total_amount)
+        amounts_layout.addRow("Amount Paid:", self.checkout_amount_paid)
+        amounts_layout.addRow("Amount Due:", self.checkout_amount_due)
         
-        payment_layout.addLayout(payment_form)
+        payment_layout.addWidget(amounts_widget)
         
-        # Payment method
-        method_widget = QWidget()
-        method_layout = QHBoxLayout(method_widget)
-        method_label = QLabel("Payment Method:")
-        self.checkout_payment_method = QComboBox()
-        self.checkout_payment_method.addItems(["Cash", "Credit Card", "Debit Card", "Mobile Payment"])
-        method_layout.addWidget(method_label)
-        method_layout.addWidget(self.checkout_payment_method)
-        payment_layout.addWidget(method_widget)
+        # Payment status with progress indicator
+        status_widget = QWidget()
+        status_layout = QVBoxLayout(status_widget)
+        
+        self.payment_status_label = QLabel("Pending")
+        self.payment_status_label.setObjectName("paymentStatus")
+        status_layout.addWidget(self.payment_status_label)
+        
+        self.payment_progress = QProgressBar()
+        self.payment_progress.setObjectName("paymentProgress")
+        self.payment_progress.setRange(0, 100)
+        self.payment_progress.setValue(0)
+        status_layout.addWidget(self.payment_progress)
+        
+        payment_layout.addWidget(status_widget)
         
         s3_layout.addWidget(payment_frame)
         self.checkout_wizard.addWidget(step3)
@@ -839,10 +863,18 @@ class CheckInWidget(QWidget):
         self.checkout_cancel_btn = QPushButton("Cancel")
         self.checkout_finish_btn = QPushButton("Finish")
         
+        # Set proper object names for styling
         self.checkout_back_btn.setObjectName("navButton")
         self.checkout_next_btn.setObjectName("navButton")
         self.checkout_cancel_btn.setObjectName("navButton")
         self.checkout_finish_btn.setObjectName("navButton")
+        
+        # Set fixed widths for consistent button sizes
+        button_width = 100
+        self.checkout_back_btn.setFixedWidth(button_width)
+        self.checkout_next_btn.setFixedWidth(button_width)
+        self.checkout_cancel_btn.setFixedWidth(button_width)
+        self.checkout_finish_btn.setFixedWidth(button_width)
         
         nav_layout.addWidget(self.checkout_cancel_btn)
         nav_layout.addStretch()
@@ -860,6 +892,24 @@ class CheckInWidget(QWidget):
         self.checkout_amount_paid.textChanged.connect(self.update_checkout_amount_due)
         
         self.load_checked_in_guests()
+
+    def populate_tax_options(self):
+        """Populate the tax selection combobox with available tax rates."""
+        self.checkout_tax_select.clear()
+        self.checkout_tax_select.addItem("No Tax", None) # Option to select no tax
+
+        tax_rates = self.safe_db_operation(get_tax_rates)
+        for tax in tax_rates:
+            display_text = tax['name']
+            if tax['tax_type'] == 'percentage':
+                display_text += f" ({tax['percentage']:.0f}%)"
+            elif tax['tax_type'] == 'fixed':
+                display_text += f" (MAD {tax['amount']:.2f} Fixed)"
+            self.checkout_tax_select.addItem(display_text, tax)
+        
+        # Only update total if UI elements exist
+        if hasattr(self, 'checkout_room_charges') and hasattr(self, 'checkout_total_amount'):
+            self.update_checkout_total()
 
     def load_checked_in_guests(self):
         """Load currently checked-in guests"""
@@ -924,26 +974,27 @@ class CheckInWidget(QWidget):
 
         # Get room rate from database based on room type
         rates = get_room_rates()
-        room_rate = next((r['night_rate'] for r in rates if r['room_type'] == checkin['room_type']), None)
-        if room_rate is None:
+        room_rate_value = next((r['night_rate'] for r in rates if r['room_type'] == checkin['room_type']), None)
+        if room_rate_value is None:
             QMessageBox.warning(self, "Error", "Room rate not found for this room type.")
             return
+        room_rate = Decimal(str(room_rate_value)) # Convert to Decimal
 
-        room_charges = nights * room_rate
+        room_charges = Decimal(nights) * room_rate # Ensure nights is also Decimal or converted to Decimal for multiplication
         self.checkout_room_charges.setText(f"MAD {room_charges:.2f}")
         
         # Load extra charges
         self.charges_table.setRowCount(0)
         extra_charges = get_booking_services(checkin['id'])
-        total_extra_charges = 0
+        total_extra_charges = Decimal('0') # Initialize as Decimal
         for charge in extra_charges:
             row = self.charges_table.rowCount()
             self.charges_table.insertRow(row)
             self.charges_table.setItem(row, 0, QTableWidgetItem(charge['service_name']))
             self.charges_table.setItem(row, 1, QTableWidgetItem(str(charge['quantity'])))
-            self.charges_table.setItem(row, 2, QTableWidgetItem(f"MAD {charge['unit_price_at_time_of_charge']:.2f}"))
-            self.charges_table.setItem(row, 3, QTableWidgetItem(f"MAD {charge['total_charge']:.2f}"))
-            total_extra_charges += charge['total_charge']
+            self.charges_table.setItem(row, 2, QTableWidgetItem(f"MAD {Decimal(str(charge['unit_price_at_time_of_charge'])):.2f}"))
+            self.charges_table.setItem(row, 3, QTableWidgetItem(f"MAD {Decimal(str(charge['total_charge'])):.2f}"))
+            total_extra_charges += Decimal(str(charge['total_charge'])) # Add as Decimal
         
         self.checkout_additional_charges.setText(f"MAD {total_extra_charges:.2f}")
         self.update_checkout_total()
@@ -953,29 +1004,58 @@ class CheckInWidget(QWidget):
         self.update_checkout_wizard_ui()
 
     def update_checkout_total(self):
-        """Update the total amount including tax"""
+        """Update the total amount including tax based on selected tax rate."""
         try:
+            # Check if required UI elements exist
+            if not all(hasattr(self, attr) for attr in ['checkout_room_charges', 'checkout_additional_charges', 
+                                                       'checkout_tax_amount_display', 'checkout_total_amount']):
+                return
+
             # Get base amounts as Decimal
             room_charges = Decimal(self.checkout_room_charges.text().replace('MAD ', '').strip() or '0')
             additional_charges = Decimal(self.checkout_additional_charges.text().replace('MAD ', '').strip() or '0')
             
-            # Calculate subtotal
+            # Get selected tax data
+            selected_tax = self.checkout_tax_select.currentData()
+            
+            tax_amount = Decimal('0')
+            taxable_base = Decimal('0')
+
+            if selected_tax:
+                # Determine taxable base
+                if selected_tax.get('apply_to_rooms', False):
+                    taxable_base += room_charges
+                if selected_tax.get('apply_to_services', False):
+                    taxable_base += additional_charges
+
+                if selected_tax['tax_type'] == 'percentage':
+                    percentage = Decimal(str(selected_tax.get('percentage', 0))) / Decimal('100')
+                    tax_amount = taxable_base * percentage
+                elif selected_tax['tax_type'] == 'fixed':
+                    tax_amount = Decimal(str(selected_tax.get('amount', 0)))
+            
+            # Update tax display
+            self.checkout_tax_amount_display.setText(f"{tax_amount:.2f}")
+            self.selected_tax_display.setText(selected_tax['name'] if selected_tax else "No tax selected")
+
+            # Calculate subtotal and total
             subtotal = room_charges + additional_charges
-            
-            # Calculate tax if checkbox is checked
-            tax_amount = subtotal * TAX_RATE if self.checkout_apply_tax.isChecked() else Decimal('0')
-            self.checkout_tax_amount.setText(f"{tax_amount:.2f}")
-            
-            # Calculate total
             total = subtotal + tax_amount
+            
             self.checkout_total_amount.setText(f"MAD {total:.2f}")
             
             # Update amount due
             self.update_checkout_amount_due()
             
-        except Exception:
-            self.checkout_total_amount.setText("0.00")
-            self.checkout_tax_amount.setText("0.00")
+        except Exception as e:
+            logger.error(f"Error updating checkout total: {str(e)}")
+            logger.error(traceback.format_exc())
+            if hasattr(self, 'checkout_total_amount'):
+                self.checkout_total_amount.setText("0.00")
+            if hasattr(self, 'checkout_tax_amount_display'):
+                self.checkout_tax_amount_display.setText("0.00")
+            if hasattr(self, 'selected_tax_display'):
+                self.selected_tax_display.setText("Error in tax calculation")
 
     def update_checkout_amount_due(self):
         """Update amount due based on total and amount paid"""
@@ -1011,33 +1091,42 @@ class CheckInWidget(QWidget):
         if not self.current_checkout:
             return
             
-        # Update room status
-        rooms = get_all_rooms()
-        room_info = next((r for r in rooms if r['id'] == self.current_checkout['room_id']), None)
-        if room_info:
-            room_info = dict(room_info)
-            room_info['status'] = 'Needs Cleaning'
-            update_room(self.current_checkout['room_id'], room_info)
-            self.room_status_changed.emit() # Emit signal for room status change
-        
-        # Update check-in status
-        self.current_checkout['payment_status'] = 'Checked Out'
-        self.current_checkout['actual_departure'] = self.checkout_actual_departure.date().toString('yyyy-MM-dd')
-        self.current_checkout['total_charges'] = float(self.checkout_total_amount.text().replace('MAD ', ''))
-        self.current_checkout['final_payment'] = float(self.checkout_amount_paid.text() or 0)
-        self.current_checkout['payment_method'] = self.checkout_payment_method.currentText()
-        
-        update_checkin(self.current_checkout['checkin_id'], self.current_checkout)
-        
-        # Generate checkout receipt
-        pdf_path = self.generate_checkout_receipt()
-        if pdf_path and os.path.exists(pdf_path):
-            os.startfile(pdf_path)
-        
-        # Reset and return to first step
-        self.checkout_wizard.setCurrentIndex(0)
-        self.update_checkout_wizard_ui()
-        self.load_checked_in_guests()
+        try:
+            # Update room status
+            rooms = get_all_rooms()
+            room_info = next((r for r in rooms if r['id'] == self.current_checkout['room_id']), None)
+            if room_info:
+                room_info = dict(room_info)
+                room_info['status'] = 'Needs Cleaning'
+                update_room(self.current_checkout['room_id'], room_info)
+                self.room_status_changed.emit() # Emit signal for room status change
+            
+            # Update check-in status
+            self.current_checkout['payment_status'] = 'Checked Out'
+            self.current_checkout['actual_departure'] = self.checkout_actual_departure.date().toString('yyyy-MM-dd')
+            self.current_checkout['total_charges'] = float(self.checkout_total_amount.text().replace('MAD ', ''))
+            self.current_checkout['final_payment'] = float(self.checkout_amount_paid.text() or 0)
+            self.current_checkout['payment_method'] = self.checkout_payment_method.currentText()
+            
+            update_checkin(self.current_checkout['checkin_id'], self.current_checkout)
+            
+            # Generate checkout receipt
+            pdf_path = self.generate_checkout_receipt()
+            if pdf_path and os.path.exists(pdf_path):
+                os.startfile(pdf_path)
+            
+            # Show success message
+            QMessageBox.information(self, "Success", "Check-out completed successfully!")
+            
+            # Reset and return to first step
+            self.checkout_wizard.setCurrentIndex(0)
+            self.update_checkout_wizard_ui()
+            self.load_checked_in_guests()
+            
+        except Exception as e:
+            logger.error(f"Error completing checkout: {str(e)}")
+            logger.error(traceback.format_exc())
+            QMessageBox.critical(self, "Error", f"Failed to complete checkout: {str(e)}")
 
     def show_checkout_confirmation(self):
         """Show checkout confirmation details"""
@@ -1795,6 +1884,8 @@ class CheckInWidget(QWidget):
             os.makedirs(RECEIPTS_DIR, exist_ok=True)
             
             # Create a PDF object with UTF-8 support
+            # Use 'P' for portrait, 'mm' for millimeters, and 'A5' for page size
+            # Create a PDF object with UTF-8 support
             pdf = FPDF()
             pdf.add_page()
             pdf.set_auto_page_break(auto=False, margin=5)
@@ -1821,7 +1912,6 @@ class CheckInWidget(QWidget):
             # For this example, I'll just put the logo at the right without an actual image.
             
             page_width = pdf.w - 2 * pdf.l_margin
-
             # Hotel Name, Address, Phone, Email (Left Aligned)
             pdf.set_font('DejaVu', 'B', 16)
             pdf.cell(page_width * 0.7, 10, "Hotel KISSAN Agdz", 0, 0, "L")
@@ -1943,23 +2033,42 @@ class CheckInWidget(QWidget):
             # --- Totals (Right Aligned Below Tables) ---
             additional_charges = Decimal(self.checkout_additional_charges.text().replace('MAD ', '').strip() or '0')
             subtotal = room_charges + additional_charges
-            tax_amount = subtotal * TAX_RATE if self.checkout_apply_tax.isChecked() else Decimal('0')
+            
+            # Get selected tax details for display and calculation
+            selected_tax = self.checkout_tax_select.currentData()
+            tax_amount = Decimal('0')
+            tax_display_name = "N/A"
+
+            if selected_tax:
+                taxable_base = Decimal('0')
+                if selected_tax.get('apply_to_rooms', False):
+                    taxable_base += room_charges
+                if selected_tax.get('apply_to_services', False):
+                    taxable_base += additional_charges
+
+                if selected_tax['tax_type'] == 'percentage':
+                    percentage = Decimal(str(selected_tax.get('percentage', 0))) / Decimal('100')
+                    tax_amount = taxable_base * percentage
+                    # tax_display_name = f"{selected_tax['name']} ({float(selected_tax.get('percentage', 0)):.0f}%)"
+                elif selected_tax['tax_type'] == 'fixed':
+                    tax_amount = Decimal(str(selected_tax.get('amount', 0)))
+                    # tax_display_name = f"{selected_tax['name']} (Fixed)"
+            
             total_amount = subtotal + tax_amount
 
             pdf.set_x(pdf.l_margin + page_width * 0.6) # Move to 60% of the page width
             pdf.set_font('DejaVu', '', 10)
             pdf.cell(page_width * 0.2, 8, "Subtotal:", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"MAD {float(subtotal):.2f}", 1, 1, "R")
+            pdf.cell(page_width * 0.2, 8, f"{float(subtotal):.2f} MAD", 1, 1, "R")
 
-            if tax_amount > 0:
-                pdf.set_x(pdf.l_margin + page_width * 0.6)
-                pdf.cell(page_width * 0.2, 8, f"TAX ({float(TAX_RATE*100):.0f}%):", 1, 0, "L")
-                pdf.cell(page_width * 0.2, 8, f"MAD {float(tax_amount):.2f}", 1, 1, "R")
+            pdf.set_x(pdf.l_margin + page_width * 0.6)
+            pdf.cell(page_width * 0.2, 8, f"TAX", 1, 0, "L")
+            pdf.cell(page_width * 0.2, 8, f"MAD {float(tax_amount):.2f}", 1, 1, "R")
             
             pdf.set_x(pdf.l_margin + page_width * 0.6)
             pdf.set_font('DejaVu', 'B', 12) # Bold font for total due
             pdf.cell(page_width * 0.2, 8, "Total Due:", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"MAD {float(total_amount):.2f}", 1, 1, "R")
+            pdf.cell(page_width * 0.2, 8, f"{float(total_amount):.2f} MAD", 1, 1, "R")
             pdf.ln(20)
 
             # --- Client Signature ---
@@ -1969,29 +2078,47 @@ class CheckInWidget(QWidget):
             pdf.ln(20)
 
             # --- Footer with Divider ---
-            # Calculate footer height (2 lines of text + divider + spacing)
-            footer_height = 12  # Approximate height in mm (2 lines * 5mm + divider + spacing)
+            # Calculate footer height and position it at the very bottom
+            footer_text = "Payment is due upon receipt. We accept cash, credit card, and bank transfers.\nThank you for choosing Grand Oasis Hotel. We hope to see you again soon!"
             
-            # Calculate footer position (fixed distance from bottom)
-            footer_y = pdf.h - pdf.b_margin - footer_height
-            print(f"margin is {pdf.b_margin}")
-            print(f"height is {pdf.h}")
-            print(f"footer y is {footer_y}")
-            
-            # Move to footer position
-            pdf.set_y(footer_y)
-            
-            # Draw divider line
-            pdf.set_draw_color(0, 0, 0)  # Black line
-            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-            pdf.ln(2)  # Small line break after the divider
-
-            # Add footer text
+            # Calculate the height of the multi_cell for the footer text
+            # This requires setting the font first to get the correct string_width.
             pdf.set_font('DejaVu', '', 10)
-            footer_text = "Payment is due upon receipt. We accept cash, credit card, and bank transfers.\nThank you for choosing Hotel KISSAN Agdz. We hope to see you again soon!"
-            pdf.multi_cell(0, 5, footer_text, 0, "C")
+            # Use pdf.get_string_width to estimate line breaks for multi_cell
+            # A rough estimate of lines for multi_cell (page_width / font_size_factor)
+            # For 2 lines, it's roughly 2 * line_height (5mm) = 10mm
+            # The actual height can be obtained more accurately, but for a fixed text,
+            # a hardcoded estimate is often sufficient.
             
-            # Save the PDF
+            # Estimated total height of footer content:
+            # 1. Horizontal line: negligible height, but takes up current_y.
+            # 2. pdf.ln(5): 5mm
+            # 3. multi_cell(0, 5, footer_text, 0, "C"): 2 lines * 5mm/line = 10mm (approx)
+            # Total estimated footer content height = 5mm (line break) + 10mm (text) = 15mm
+            
+            # Position Y at the bottom of the page, considering bottom margin
+            # pdf.h is total page height (A5 is 210mm)
+            # pdf.b_margin is bottom margin (default 10mm, but auto_page_break margin is 30mm)
+            # We want to place the footer content to end exactly at pdf.h - pdf.b_margin
+            
+            # Calculate the y-coordinate where the footer content should *start*
+            # This ensures the footer is flush with the bottom margin.
+            footer_content_height = 15 # Estimated height of the footer text and line break
+            footer_start_y = pdf.h - pdf.b_margin - footer_content_height
+
+            # Set current Y position explicitly to place the footer at the bottom
+            pdf.set_y(footer_start_y)
+
+            pdf.set_draw_color(0, 0, 0) # Black line
+            # Draw line across the page width
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y()) # Draw a horizontal line
+            pdf.ln(5) # Small line break after the divider
+
+            pdf.set_font('DejaVu', '', 10)
+            pdf.multi_cell(0, 5, footer_text, 0, "C")
+            # Removed final pdf.ln(10) as positioning is now explicit.
+
+            # Define the output PDF file path
             output_pdf_file = os.path.join(RECEIPTS_DIR, f"checkout_receipt_{self.current_checkout['checkin_id']}.pdf")
             
             # Save the PDF
