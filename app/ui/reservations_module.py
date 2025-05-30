@@ -112,7 +112,11 @@ class ReservationsWidget(QWidget):
         layout.setSpacing(20)
         
         # Search and filter bar
-        filter_layout = QHBoxLayout()
+        filter_frame = QFrame()
+        filter_frame.setObjectName("filterFrame")
+        filter_layout = QHBoxLayout(filter_frame)
+        filter_layout.setContentsMargins(0, 0, 0, 0)  # Add consistent margins
+        filter_layout.setSpacing(10)  # Add consistent spacing
         
         # Search input
         self.search_input = QLineEdit()
@@ -139,7 +143,7 @@ class ReservationsWidget(QWidget):
         clear_filters_btn.clicked.connect(self.clear_filters)
         filter_layout.addWidget(clear_filters_btn)
         
-        layout.addLayout(filter_layout)
+        layout.addWidget(filter_frame)
         
         # ===== KEY FIXES FOR TABLE SHRINKING =====
         
@@ -164,20 +168,10 @@ class ReservationsWidget(QWidget):
         # CRITICAL FIX: Add table directly to main layout with stretch factor
         layout.addWidget(self.reservations_table, 1)  # Stretch factor = 1
         
-        # Buttons for actions
-        buttons_layout = QHBoxLayout()
-        self.refresh_button = QPushButton("Refresh")
-        self.export_button = QPushButton("Export")
-        buttons_layout.addWidget(self.refresh_button)
-        buttons_layout.addWidget(self.export_button)
-        buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
-        
         # Connect filter signals
         self.search_input.textChanged.connect(self.filter_reservations)
         self.filter_arrival.dateChanged.connect(self.filter_reservations)
         self.filter_status.currentIndexChanged.connect(self.filter_reservations)
-        self.refresh_button.clicked.connect(self.load_reservations)
 
     def clear_filters(self):
         """Clear all filters and show all reservations"""
@@ -260,7 +254,6 @@ class ReservationsWidget(QWidget):
             self.search_input.textChanged.connect(self.filter_reservations)
             self.filter_arrival.dateChanged.connect(self.filter_reservations)
             self.filter_status.currentIndexChanged.connect(self.filter_reservations)
-            self.refresh_button.clicked.connect(self.load_reservations)
             self.search_connected = True
 
     def filter_reservations(self):

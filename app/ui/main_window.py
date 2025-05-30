@@ -20,6 +20,8 @@ from app.ui.settings import SettingsWidget
 from app.ui.room_management import RoomManagementWidget
 from app.ui.styles import MAIN_STYLESHEET
 from PyQt6.QtCore import pyqtSignal
+from app.ui.reports import ReportsWidget
+
 
 class MainWindow(QMainWindow):
     """Main application window"""
@@ -168,14 +170,7 @@ class MainWindow(QMainWindow):
         self.create_nav_button("Services", ":/icons/star.png", 5)
         
         # Reports
-        reports_widget = QWidget()
-        reports_layout = QVBoxLayout(reports_widget)
-        title_label = QLabel("Reports")
-        title_label.setObjectName("sectionTitle")
-        reports_layout.addWidget(title_label)
-        content_label = QLabel("Reports content will be displayed here")
-        content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        reports_layout.addWidget(content_label)
+        reports_widget = ReportsWidget()
         self.content_stack.addWidget(reports_widget)
         self.create_nav_button("Reports", ":/icons/reports.png", 6)
         

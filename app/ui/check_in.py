@@ -133,7 +133,7 @@ class CheckInWidget(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(0)
+        layout.setSpacing(20)
         
         # Header
         header_layout = QHBoxLayout()
@@ -186,11 +186,15 @@ class CheckInWidget(QWidget):
 
     def setup_checkin_list_tab(self):
         layout = QVBoxLayout(self.checkin_list_tab)
+        layout.setContentsMargins(20, 20, 20, 20)  # Add consistent margins
+        layout.setSpacing(20)  # Add consistent spacing
         
         # Search and filter bar
         filter_frame = QFrame()
         filter_frame.setObjectName("filterFrame")
         filter_layout = QHBoxLayout(filter_frame)
+        filter_layout.setContentsMargins(0, 0, 0, 0)  # Add consistent margins
+        filter_layout.setSpacing(10)  # Add consistent spacing
         
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search by guest, check-in #, date...")
@@ -917,7 +921,7 @@ class CheckInWidget(QWidget):
         checkins = get_all_checkins()
         
         for checkin in checkins:
-            if checkin['payment_status'] != 'Checked Out':
+            if checkin['payment_status'] != 'checked_out':
                 row = self.checkout_table.rowCount()
                 self.checkout_table.insertRow(row)
                 
@@ -1102,7 +1106,7 @@ class CheckInWidget(QWidget):
                 self.room_status_changed.emit() # Emit signal for room status change
             
             # Update check-in status
-            self.current_checkout['payment_status'] = 'Checked Out'
+            self.current_checkout['payment_status'] = 'checked_out'
             self.current_checkout['actual_departure'] = self.checkout_actual_departure.date().toString('yyyy-MM-dd')
             self.current_checkout['total_charges'] = float(self.checkout_total_amount.text().replace('MAD ', ''))
             self.current_checkout['final_payment'] = float(self.checkout_amount_paid.text() or 0)

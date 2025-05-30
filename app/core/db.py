@@ -729,3 +729,63 @@ def get_cancellation_details(reservation_id):
     cancellation = dict(zip(columns, c.fetchone())) if c.fetchone() else None
     conn.close()
     return cancellation 
+
+def get_filtered_checkins(from_date, to_date, room_type="All", status="All"):
+    conn = get_connection()
+    c = conn.cursor()
+
+    query = """
+        SELECT ci.checkin_id,
+               g.first_name || ' ' || g.last_name AS guest_name,
+               r.number AS room_number,
+               ci.arrival_date,
+               ci.departure_date,
+               ci.payment_status,
+               ci.payment_status AS status
+        FROM check_ins ci
+        JOIN guests g ON ci.guest_id = g.id
+        JOIN rooms r ON ci.room_id = r.id
+        WHERE date(ci.arrival_date) BETWEEN ? AND ?
+    """
+    params = [from_date, to_date]
+
+    if room_type != "All":
+        query += " AND r.type = ?"
+        params.append(room_type)
+
+    if status != "All":
+        query += " AND ci.payment_status = ?"
+        params.append(status)
+
+    c.execute(query, params)
+    columns = [desc[0] for desc in c.description]
+    results = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return results
+
+
+def get_filtered_reservations(from_date, to_date, room_type="All", status="All"):
+    conn = get_connection()
+    c = conn.cursor()
+
+    query = """
+        SELECT reservation_id, guest_first_name, guest_last_name, room_type,
+               arrival_date, num_guests, deposit_amount, status, created_on
+        FROM reservations
+        WHERE date(arrival_date) BETWEEN ? AND ?
+    """
+    params = [from_date, to_date]
+
+    if room_type != "All":
+        query += " AND room_type = ?"
+        params.append(room_type)
+
+    if status != "All":
+        query += " AND status = ?"
+        params.append(status)
+
+    c.execute(query, params)
+    columns = [desc[0] for desc in c.description]
+    results = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return results

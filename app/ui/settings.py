@@ -4,10 +4,9 @@ from PyQt6.QtWidgets import (
     QDialog, QDialogButtonBox, QDoubleSpinBox, QComboBox, QCheckBox, QFrame
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QColor, QPainter, QPixmap
 from app.core.db import (
-    get_hotel_settings, update_hotel_settings, get_room_rates, update_room_rate,
-    get_services, add_service, update_service, delete_service,
+    get_hotel_settings, update_hotel_settings,
     get_tax_rates, add_tax_rate, update_tax_rate, delete_tax_rate
 )
 
@@ -26,16 +25,6 @@ class SettingsWidget(QWidget):
         self.hotel_info_tab = QWidget()
         self.setup_hotel_info_tab()
         self.tab_widget.addTab(self.hotel_info_tab, QIcon(":/icons/hotel_info.png"), "Hotel Information")
-        
-        # Room Rates tab
-        self.room_rates_tab = QWidget()
-        self.setup_room_rates_tab()
-        self.tab_widget.addTab(self.room_rates_tab, QIcon(":/icons/room_rates.png"), "Room Rates")
-        
-        # Services tab
-        self.services_tab = QWidget()
-        self.setup_services_tab()
-        self.tab_widget.addTab(self.services_tab, QIcon(":/icons/services.png"), "Services")
         
         # Tax Rates tab
         self.tax_rates_tab = QWidget()
@@ -77,50 +66,6 @@ class SettingsWidget(QWidget):
         # Load existing settings
         self.load_hotel_info()
         
-    def setup_room_rates_tab(self):
-        layout = QVBoxLayout(self.room_rates_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
-        
-        # Room Rates Table
-        self.room_rates_table = QTableWidget()
-        self.room_rates_table.setColumnCount(3)
-        self.room_rates_table.setHorizontalHeaderLabels(["Room Type", "Night Rate", "Actions"])
-        self.room_rates_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.room_rates_table.setObjectName("dataTable")
-        layout.addWidget(self.room_rates_table)
-        
-        # Add Rate button
-        add_btn = QPushButton("Add Room Rate")
-        add_btn.setObjectName("actionButton")
-        add_btn.clicked.connect(self.add_room_rate)
-        layout.addWidget(add_btn)
-        
-        # Load existing rates
-        self.load_room_rates()
-        
-    def setup_services_tab(self):
-        layout = QVBoxLayout(self.services_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
-        
-        # Services Table
-        self.services_table = QTableWidget()
-        self.services_table.setColumnCount(4)
-        self.services_table.setHorizontalHeaderLabels(["Service Name", "Default Price", "Unit", "Actions"])
-        self.services_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.services_table.setObjectName("dataTable")
-        layout.addWidget(self.services_table)
-        
-        # Add Service button
-        add_btn = QPushButton("Add Service")
-        add_btn.setObjectName("actionButton")
-        add_btn.clicked.connect(self.add_service)
-        layout.addWidget(add_btn)
-        
-        # Load existing services
-        self.load_services()
-        
     def setup_tax_rates_tab(self):
         layout = QVBoxLayout(self.tax_rates_tab)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -132,6 +77,10 @@ class SettingsWidget(QWidget):
         self.tax_rates_table.setHorizontalHeaderLabels([
             "Tax Name", "Type", "Value", "Apply to Rooms", "Apply to Services", "Actions"
         ])
+        self.tax_rates_table.verticalHeader().setDefaultSectionSize(50)
+        self.tax_rates_table.setAlternatingRowColors(True)
+        self.tax_rates_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
         self.tax_rates_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tax_rates_table.setObjectName("dataTable")
         layout.addWidget(self.tax_rates_table)
@@ -164,206 +113,6 @@ class SettingsWidget(QWidget):
         }
         update_hotel_settings(settings)
         
-    def load_room_rates(self):
-        self.room_rates_table.setRowCount(0)
-        rates = get_room_rates()
-        
-        for rate in rates:
-            row = self.room_rates_table.rowCount()
-            self.room_rates_table.insertRow(row)
-            
-            self.room_rates_table.setItem(row, 0, QTableWidgetItem(rate['room_type']))
-            self.room_rates_table.setItem(row, 1, QTableWidgetItem(f"MAD {rate['night_rate']:.2f}"))
-            
-            # Add edit button
-            edit_btn = QPushButton("Edit")
-            edit_btn.setObjectName("actionButton")
-            edit_btn.clicked.connect(lambda _, r=rate: self.edit_room_rate(r))
-            
-            actions_widget = QWidget()
-            actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(0, 0, 0, 0)
-            actions_layout.addWidget(edit_btn)
-            
-            self.room_rates_table.setCellWidget(row, 2, actions_widget)
-            
-    def add_room_rate(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Add Room Rate")
-        layout = QVBoxLayout(dialog)
-        
-        form = QFormLayout()
-        
-        room_type = QLineEdit()
-        form.addRow("Room Type:", room_type)
-        
-        night_rate = QDoubleSpinBox()
-        night_rate.setRange(0, 10000)
-        night_rate.setDecimals(2)
-        night_rate.setPrefix("MAD ")
-        form.addRow("Night Rate:", night_rate)
-        
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        
-        layout.addLayout(form)
-        layout.addWidget(buttons)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            update_room_rate(room_type.text(), night_rate.value())
-            self.load_room_rates()
-            
-    def edit_room_rate(self, rate):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Edit Room Rate")
-        layout = QVBoxLayout(dialog)
-        
-        form = QFormLayout()
-        
-        room_type = QLineEdit(rate['room_type'])
-        form.addRow("Room Type:", room_type)
-        
-        night_rate = QDoubleSpinBox()
-        night_rate.setRange(0, 10000)
-        night_rate.setDecimals(2)
-        night_rate.setPrefix("MAD ")
-        night_rate.setValue(rate['night_rate'])
-        form.addRow("Night Rate:", night_rate)
-        
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        
-        layout.addLayout(form)
-        layout.addWidget(buttons)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            update_room_rate(room_type.text(), night_rate.value())
-            self.load_room_rates()
-            
-    def load_services(self):
-        self.services_table.setRowCount(0)
-        services = get_services()
-        
-        for service in services:
-            row = self.services_table.rowCount()
-            self.services_table.insertRow(row)
-            
-            self.services_table.setItem(row, 0, QTableWidgetItem(service['name']))
-            self.services_table.setItem(row, 1, QTableWidgetItem(f"MAD {service['default_price']:.2f}"))
-            self.services_table.setItem(row, 2, QTableWidgetItem(service['unit']))
-            
-            # Add action buttons
-            actions_widget = QWidget()
-            actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(0, 0, 0, 0)
-            
-            edit_btn = QPushButton("Edit")
-            edit_btn.setObjectName("actionButton")
-            edit_btn.clicked.connect(lambda _, s=service: self.edit_service(s))
-            
-            delete_btn = QPushButton("Delete")
-            delete_btn.setObjectName("actionButton")
-            delete_btn.clicked.connect(lambda _, s=service: self.delete_service(s))
-            
-            actions_layout.addWidget(edit_btn)
-            actions_layout.addWidget(delete_btn)
-            
-            self.services_table.setCellWidget(row, 3, actions_widget)
-            
-    def add_service(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Add Service")
-        layout = QVBoxLayout(dialog)
-        
-        form = QFormLayout()
-        
-        name = QLineEdit()
-        form.addRow("Service Name:", name)
-        
-        price = QDoubleSpinBox()
-        price.setRange(0, 10000)
-        price.setDecimals(2)
-        price.setPrefix("MAD ")
-        form.addRow("Default Price:", price)
-        
-        unit = QComboBox()
-        unit.addItems(["per item", "per kg", "per hour", "per day", "per service"])
-        unit.setEditable(True)
-        form.addRow("Unit:", unit)
-        
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        
-        layout.addLayout(form)
-        layout.addWidget(buttons)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            service = {
-                'name': name.text(),
-                'default_price': price.value(),
-                'unit': unit.currentText()
-            }
-            add_service(service)
-            self.load_services()
-            
-    def edit_service(self, service):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Edit Service")
-        layout = QVBoxLayout(dialog)
-        
-        form = QFormLayout()
-        
-        name = QLineEdit(service['name'])
-        form.addRow("Service Name:", name)
-        
-        price = QDoubleSpinBox()
-        price.setRange(0, 10000)
-        price.setDecimals(2)
-        price.setPrefix("MAD ")
-        price.setValue(service['default_price'])
-        form.addRow("Default Price:", price)
-        
-        unit = QComboBox()
-        unit.addItems(["per item", "per kg", "per hour", "per day", "per service"])
-        unit.setEditable(True)
-        unit.setCurrentText(service['unit'])
-        form.addRow("Unit:", unit)
-        
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        
-        layout.addLayout(form)
-        layout.addWidget(buttons)
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            updated_service = {
-                'name': name.text(),
-                'default_price': price.value(),
-                'unit': unit.currentText()
-            }
-            update_service(service['id'], updated_service)
-            self.load_services()
-            
-    def delete_service(self, service):
-        delete_service(service['id'])
-        self.load_services()
-        
     def load_tax_rates(self):
         self.tax_rates_table.setRowCount(0)
         rates = get_tax_rates()
@@ -382,16 +131,18 @@ class SettingsWidget(QWidget):
                 value = f"MAD {rate['amount']:.2f}"
             self.tax_rates_table.setItem(row, 2, QTableWidgetItem(value))
             
-            # Add checkboxes for apply to rooms/services
-            rooms_check = QCheckBox()
-            rooms_check.setChecked(rate['apply_to_rooms'])
-            rooms_check.stateChanged.connect(lambda state, r=rate: self.update_tax_rate_apply(r, 'rooms', state))
-            self.tax_rates_table.setCellWidget(row, 3, rooms_check)
+            # Create status indicators for rooms and services
+            rooms_indicator = QLabel()
+            rooms_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            rooms_pixmap = self.create_status_indicator(rate['apply_to_rooms'])
+            rooms_indicator.setPixmap(rooms_pixmap)
+            self.tax_rates_table.setCellWidget(row, 3, rooms_indicator)
             
-            services_check = QCheckBox()
-            services_check.setChecked(rate['apply_to_services'])
-            services_check.stateChanged.connect(lambda state, r=rate: self.update_tax_rate_apply(r, 'services', state))
-            self.tax_rates_table.setCellWidget(row, 4, services_check)
+            services_indicator = QLabel()
+            services_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            services_pixmap = self.create_status_indicator(rate['apply_to_services'])
+            services_indicator.setPixmap(services_pixmap)
+            self.tax_rates_table.setCellWidget(row, 4, services_indicator)
             
             # Add action buttons
             actions_widget = QWidget()
@@ -411,6 +162,24 @@ class SettingsWidget(QWidget):
             
             self.tax_rates_table.setCellWidget(row, 5, actions_widget)
             
+    def create_status_indicator(self, is_active):
+        """Create a colored dot indicator for status"""
+        size = 16
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw circle
+        color = QColor("#4CAF50") if is_active else QColor("#9E9E9E")
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(2, 2, size-4, size-4)
+        painter.end()
+        
+        return pixmap
+        
     def add_tax_rate(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Tax Rate")
