@@ -38,7 +38,7 @@ class MainWindow(QMainWindow):
         
     def setup_ui(self):
         # Set window properties
-        self.setWindowTitle("Hotel Management System")
+        self.setWindowTitle("HOTEL KISSAN AGDZ")
         self.setMinimumSize(1200, 800)
         
         # Set the stylesheet
