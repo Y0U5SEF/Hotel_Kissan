@@ -406,7 +406,7 @@ class GuestsWidget(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             delete_guest(guest['id'])
             self.load_guests()
-            self.guest_data_changed()
+            self.guest_data_changed.emit()
 
     
             
