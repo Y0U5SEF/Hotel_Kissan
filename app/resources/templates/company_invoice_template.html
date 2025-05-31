@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Company Invoice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .hotel-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .invoice-details {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        .company-details {
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f5;
+        }
+        .totals {
+            text-align: right;
+            margin-top: 20px;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .payment-terms {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>INVOICE</h1>
+    </div>
+
+    <div class="hotel-info">
+        <h2>Hotel KISSAN Agdz</h2>
+        <p>Avenue Mohamed V, Agdz, Province of Zagora, Morocco</p>
+        <p>Phone: +212 5 44 84 30 44 | Fax: +212 5 44 84 32 58</p>
+        <p>Email: kissane@iam.net.ma</p>
+    </div>
+
+    <div class="invoice-details">
+        <div>
+            <p><strong>Invoice Number:</strong> {{ invoice_number }}</p>
+            <p><strong>Date:</strong> {{ invoice_date }}</p>
+        </div>
+        <div>
+            <p><strong>Due Date:</strong> {{ due_date }}</p>
+        </div>
+    </div>
+
+    <div class="company-details">
+        <h3>Bill To:</h3>
+        <p><strong>{{ company_name }}</strong></p>
+        <p>Contact: {{ contact_person }}</p>
+        <p>Email: {{ contact_email }}</p>
+        <p>Phone: {{ contact_phone }}</p>
+        <p>Address: {{ billing_address }}</p>
+        {% if tax_id %}
+        <p>Tax ID: {{ tax_id }}</p>
+        {% endif %}
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Guest Name</th>
+                <th>Room</th>
+                <th>Check-in</th>
+                <th>Check-out</th>
+                <th>Nights</th>
+                <th>Rate/Night</th>
+                <th>Room Total</th>
+                <th>Additional Charges</th>
+                <th>Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in guest_bookings %}
+            <tr>
+                <td>{{ booking.guest_name }}</td>
+                <td>{{ booking.room_number }}</td>
+                <td>{{ booking.check_in }}</td>
+                <td>{{ booking.check_out }}</td>
+                <td>{{ booking.nights }}</td>
+                <td>{{ booking.rate_per_night }}</td>
+                <td>{{ booking.room_total }}</td>
+                <td>{{ booking.additional_charges }}</td>
+                <td>{{ booking.subtotal }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals">
+        <p><strong>Subtotal:</strong> {{ subtotal }}</p>
+        <p><strong>Tax:</strong> {{ tax_amount }}</p>
+        <p><strong>Total Amount:</strong> {{ total_amount }}</p>
+        <p><strong>Amount Paid:</strong> {{ amount_paid }}</p>
+        <p><strong>Balance Due:</strong> {{ balance_due }}</p>
+    </div>
+
+    <div class="payment-terms">
+        <h3>Payment Terms</h3>
+        <p>{{ payment_terms }}</p>
+        {% if special_instructions %}
+        <p><strong>Special Instructions:</strong> {{ special_instructions }}</p>
+        {% endif %}
+    </div>
+
+    <div class="footer">
+        <p>Thank you for choosing Hotel KISSAN Agdz!</p>
+        <p>This is a computer-generated invoice and does not require a signature.</p>
+    </div>
+</body>
+</html> 

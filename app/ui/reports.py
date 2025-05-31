@@ -5,8 +5,12 @@ from PyQt6.QtWidgets import (
 , QHeaderView)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QIcon
-from app.core.db import get_filtered_reservations, get_filtered_checkins
+from app.core.db import (
+    get_filtered_reservations, get_filtered_checkins,
+    get_all_guests, get_booking_services, get_services
+)
 from app.utils.report_exporter import export_checkins_pdf, export_checkins_xlsx
+from app.ui.styles import MAIN_STYLESHEET
 import os
 
 class ReportsWidget(QWidget):
@@ -66,8 +70,15 @@ class ReportsWidget(QWidget):
         # --- Buttons ---
         button_layout = QHBoxLayout()
         self.load_btn = QPushButton("Load Report")
+        self.load_btn.setObjectName("actionButton")
         self.export_pdf_btn = QPushButton("Export as PDF")
+        self.export_pdf_btn.setObjectName("actionButton")
         self.export_xlsx_btn = QPushButton("Export as Excel")
+        self.export_xlsx_btn.setObjectName("actionButton")
+
+        # Set icons for export buttons
+        self.export_pdf_btn.setIcon(QIcon(":/icons/pdf_48px.png"))
+        self.export_xlsx_btn.setIcon(QIcon(":/icons/google_sheets_48px.png"))
 
         self.load_btn.clicked.connect(self.load_report_data)
         self.export_pdf_btn.clicked.connect(self.export_pdf)
@@ -110,6 +121,45 @@ class ReportsWidget(QWidget):
         self.checkins_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.stacked_tables.addWidget(self.checkins_table)
 
+        # Guests Table
+        self.guests_table = QTableWidget()
+        self.guests_table.setColumnCount(8)
+        self.guests_table.setHorizontalHeaderLabels([
+            "ID", "Name", "ID Type", "ID Number", "Phone", "Email", "Nationality", "VIP Status"
+        ])
+        self.guests_table.setAlternatingRowColors(True)
+        self.guests_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.guests_table.verticalHeader().setDefaultSectionSize(30)
+        self.guests_table.horizontalHeader().setStretchLastSection(True)
+        self.guests_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.stacked_tables.addWidget(self.guests_table)
+
+        # Revenue Table
+        self.revenue_table = QTableWidget()
+        self.revenue_table.setColumnCount(7)
+        self.revenue_table.setHorizontalHeaderLabels([
+            "Booking ID", "Guest Name", "Room Type", "Check-in Date", "Check-out Date", "Room Revenue", "Services Revenue"
+        ])
+        self.revenue_table.setAlternatingRowColors(True)
+        self.revenue_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.revenue_table.verticalHeader().setDefaultSectionSize(30)
+        self.revenue_table.horizontalHeader().setStretchLastSection(True)
+        self.revenue_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.stacked_tables.addWidget(self.revenue_table)
+
+        # Services Table
+        self.services_table = QTableWidget()
+        self.services_table.setColumnCount(6)
+        self.services_table.setHorizontalHeaderLabels([
+            "Service ID", "Service Name", "Default Price", "Unit", "Total Usage", "Total Revenue"
+        ])
+        self.services_table.setAlternatingRowColors(True)
+        self.services_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.services_table.verticalHeader().setDefaultSectionSize(30)
+        self.services_table.horizontalHeader().setStretchLastSection(True)
+        self.services_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.stacked_tables.addWidget(self.services_table)
+
         layout.addWidget(self.stacked_tables)
 
     def load_report_data(self):
@@ -122,6 +172,7 @@ class ReportsWidget(QWidget):
         if report_type == "Reservations":
             self.status_filter.clear()
             self.status_filter.addItems(["All", "Confirmed", "Pending", "Cancelled"])
+            self.status_filter.setEnabled(True)
             self.stacked_tables.setCurrentWidget(self.reservations_table)
             self.reservations_table.setRowCount(0)
             reservations = get_filtered_reservations(from_date, to_date, room_type, status)
@@ -139,10 +190,11 @@ class ReportsWidget(QWidget):
 
         elif report_type == "Check-ins":
             self.status_filter.clear()
-            self.status_filter.addItems(["All", "Checked-in", "Checked-out", "Cancelled"])
+            self.status_filter.addItems(["All", "Checked-in", "Cancelled"])
+            self.status_filter.setEnabled(True)
             self.stacked_tables.setCurrentWidget(self.checkins_table)
             self.checkins_table.setRowCount(0)
-            checkins = get_filtered_checkins(from_date, to_date, room_type)
+            checkins = get_filtered_checkins(from_date, to_date, room_type, status="checked_in")
             for record in checkins:
                 row = self.checkins_table.rowCount()
                 self.checkins_table.insertRow(row)
@@ -152,13 +204,13 @@ class ReportsWidget(QWidget):
                 self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
                 self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
                 self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("status", "")))
-                
 
         elif report_type == "Check-outs":
             self.status_filter.clear()
+            self.status_filter.setEnabled(False)
             self.stacked_tables.setCurrentWidget(self.checkins_table)
             self.checkins_table.setRowCount(0)
-            checkouts = get_filtered_checkins(from_date, to_date, room_type, status="Checked-out")
+            checkouts = get_filtered_checkins(from_date, to_date, room_type, status="checked_out")
             for record in checkouts:
                 row = self.checkins_table.rowCount()
                 self.checkins_table.insertRow(row)
@@ -168,7 +220,70 @@ class ReportsWidget(QWidget):
                 self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
                 self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
                 self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("status", "")))
-                self.checkins_table.setItem(row, 6, QTableWidgetItem(record.get("payment_status", "")))
+
+        elif report_type == "Guests":
+            self.status_filter.clear()
+            self.status_filter.setEnabled(False)
+            self.stacked_tables.setCurrentWidget(self.guests_table)
+            self.guests_table.setRowCount(0)
+            guests = get_all_guests()
+            for guest in guests:
+                row = self.guests_table.rowCount()
+                self.guests_table.insertRow(row)
+                self.guests_table.setItem(row, 0, QTableWidgetItem(str(guest.get("id", ""))))
+                self.guests_table.setItem(row, 1, QTableWidgetItem(f"{guest.get('first_name', '')} {guest.get('last_name', '')}"))
+                self.guests_table.setItem(row, 2, QTableWidgetItem(guest.get("id_type", "")))
+                self.guests_table.setItem(row, 3, QTableWidgetItem(guest.get("id_number", "")))
+                self.guests_table.setItem(row, 4, QTableWidgetItem(f"{guest.get('phone_code', '')} {guest.get('phone_number', '')}"))
+                self.guests_table.setItem(row, 5, QTableWidgetItem(guest.get("email", "")))
+                self.guests_table.setItem(row, 6, QTableWidgetItem(guest.get("nationality", "")))
+                self.guests_table.setItem(row, 7, QTableWidgetItem(guest.get("vip_status", "")))
+
+        elif report_type == "Revenue":
+            self.status_filter.clear()
+            self.status_filter.setEnabled(False)
+            self.stacked_tables.setCurrentWidget(self.revenue_table)
+            self.revenue_table.setRowCount(0)
+            checkins = get_filtered_checkins(from_date, to_date, room_type)
+            for record in checkins:
+                row = self.revenue_table.rowCount()
+                self.revenue_table.insertRow(row)
+                self.revenue_table.setItem(row, 0, QTableWidgetItem(record.get("checkin_id", "")))
+                self.revenue_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
+                self.revenue_table.setItem(row, 2, QTableWidgetItem(record.get("room_type", "")))
+                self.revenue_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
+                self.revenue_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
+                self.revenue_table.setItem(row, 5, QTableWidgetItem(str(record.get("total_paid", "0.00"))))
+                # Get services revenue
+                services = get_booking_services(record.get("id"))
+                services_revenue = sum(service.get("total_charge", 0) for service in services)
+                self.revenue_table.setItem(row, 6, QTableWidgetItem(str(services_revenue)))
+
+        elif report_type == "Services":
+            self.status_filter.clear()
+            self.status_filter.setEnabled(False)
+            self.stacked_tables.setCurrentWidget(self.services_table)
+            self.services_table.setRowCount(0)
+            services = get_services()
+            for service in services:
+                row = self.services_table.rowCount()
+                self.services_table.insertRow(row)
+                self.services_table.setItem(row, 0, QTableWidgetItem(str(service.get("id", ""))))
+                self.services_table.setItem(row, 1, QTableWidgetItem(service.get("name", "")))
+                self.services_table.setItem(row, 2, QTableWidgetItem(str(service.get("default_price", "0.00"))))
+                self.services_table.setItem(row, 3, QTableWidgetItem(service.get("unit", "")))
+                # Calculate total usage and revenue
+                total_usage = 0
+                total_revenue = 0
+                checkins = get_filtered_checkins(from_date, to_date)
+                for checkin in checkins:
+                    booking_services = get_booking_services(checkin.get("id"))
+                    for booking_service in booking_services:
+                        if booking_service.get("service_id") == service.get("id"):
+                            total_usage += booking_service.get("quantity", 0)
+                            total_revenue += booking_service.get("total_charge", 0)
+                self.services_table.setItem(row, 4, QTableWidgetItem(str(total_usage)))
+                self.services_table.setItem(row, 5, QTableWidgetItem(str(total_revenue)))
 
     def export_pdf(self):
         report_type = self.report_type.currentText().replace(" ", "_").lower()

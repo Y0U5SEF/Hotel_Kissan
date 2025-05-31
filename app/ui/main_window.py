@@ -21,6 +21,7 @@ from app.ui.room_management import RoomManagementWidget
 from app.ui.styles import MAIN_STYLESHEET
 from PyQt6.QtCore import pyqtSignal
 from app.ui.reports import ReportsWidget
+from app.core.auth import UserAuthenticator
 
 
 class MainWindow(QMainWindow):
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        self.authenticator = UserAuthenticator()
         self.setup_ui()
         self.load_styles()
         self.guests_widget.guest_data_changed.connect(self.checkin_widget.reload_guests_for_search)
@@ -114,17 +116,20 @@ class MainWindow(QMainWindow):
         user_layout = QHBoxLayout(user_widget)
         user_layout.setSpacing(15)
         
-        user_label = QLabel("John Doe")  # Replace with actual user name
+        # Get current user info
+        user_name = self.authenticator.get_full_name() or "Not logged in"
+        
+        user_label = QLabel(user_name)
         user_label.setObjectName("userName")
         user_layout.addWidget(user_label)
         
         logout_btn = QPushButton()
         logout_btn.setObjectName("logoutButton")
         logout_btn.setIcon(QIcon(":/icons/logout.png"))
-        
         logout_btn.setIconSize(QSize(20, 20))
         logout_btn.setFixedSize(32, 32)
         logout_btn.setToolTip("Logout")
+        logout_btn.clicked.connect(self.handle_logout)
         user_layout.addWidget(logout_btn)
         
         top_layout.addWidget(user_widget)
@@ -405,3 +410,8 @@ class MainWindow(QMainWindow):
     def delete_service(self, service):
         delete_service(service['id'])
         self.load_services()
+
+    def handle_logout(self):
+        """Handle logout button click"""
+        self.authenticator.logout()
+        self.close()

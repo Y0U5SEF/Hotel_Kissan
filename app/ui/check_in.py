@@ -921,7 +921,7 @@ class CheckInWidget(QWidget):
         checkins = get_all_checkins()
         
         for checkin in checkins:
-            if checkin['payment_status'] != 'checked_out':
+            if checkin['status'] != 'checked_out':
                 row = self.checkout_table.rowCount()
                 self.checkout_table.insertRow(row)
                 
@@ -1106,7 +1106,7 @@ class CheckInWidget(QWidget):
                 self.room_status_changed.emit() # Emit signal for room status change
             
             # Update check-in status
-            self.current_checkout['payment_status'] = 'checked_out'
+            self.current_checkout['status'] = 'checked_out'
             self.current_checkout['actual_departure'] = self.checkout_actual_departure.date().toString('yyyy-MM-dd')
             self.current_checkout['total_charges'] = float(self.checkout_total_amount.text().replace('MAD ', ''))
             self.current_checkout['final_payment'] = float(self.checkout_amount_paid.text() or 0)
@@ -1360,7 +1360,7 @@ class CheckInWidget(QWidget):
         total_paid = self.total_paid.text()
         amount_due = self.amount_due.text()
         payment_method = self.payment_method.currentText()
-        payment_status = self.payment_status_label.text()
+        status = self.payment_status_label.text()
         
         # Detailed confirmation message
         message = f"""
@@ -1383,7 +1383,7 @@ class CheckInWidget(QWidget):
         &nbsp;&nbsp;Total Paid: MAD {total_paid}<br>
         &nbsp;&nbsp;Amount Due: MAD {amount_due}<br>
         &nbsp;&nbsp;Payment Method: {payment_method}<br>
-        &nbsp;&nbsp;Payment Status: {payment_status}<br>
+        &nbsp;&nbsp;Payment Status: {status}<br>
         </div>
         <br><b style='color:#2980b9;'>Check-in has been successfully completed!</b>
         """
@@ -1452,7 +1452,7 @@ class CheckInWidget(QWidget):
                 'payment_method': self.payment_method.currentText(),
                 'total_paid': float(self.total_paid.text().replace('MAD ', '') or 0),
                 'amount_due': float(self.amount_due.text().replace('MAD ', '') or 0),
-                'payment_status': 'checked_in',
+                'status': 'checked_in',
                 'checkin_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
 
@@ -1801,7 +1801,7 @@ class CheckInWidget(QWidget):
             self.checkin_table.setItem(row, 2, QTableWidgetItem(checkin['arrival_date']))
             self.checkin_table.setItem(row, 3, QTableWidgetItem(checkin['departure_date']))
             self.checkin_table.setItem(row, 4, QTableWidgetItem(f"{checkin['room_type']} #{checkin['room_number']}"))
-            self.checkin_table.setItem(row, 5, QTableWidgetItem(checkin['payment_status']))
+            self.checkin_table.setItem(row, 5, QTableWidgetItem(checkin['status']))
             
             # Add action buttons
             actions_widget = QWidget()
@@ -1855,7 +1855,7 @@ class CheckInWidget(QWidget):
         &nbsp;&nbsp;Total Paid: MAD {checkin['total_paid']:.2f}<br>
         &nbsp;&nbsp;Amount Due: MAD {checkin['amount_due']:.2f}<br>
         &nbsp;&nbsp;Payment Method: {checkin['payment_method']}<br>
-        &nbsp;&nbsp;Payment Status: {checkin['payment_status']}<br>
+        &nbsp;&nbsp;Payment Status: {checkin['status']}<br>
         {extra_charges_text}
         </div>
         """

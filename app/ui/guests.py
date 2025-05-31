@@ -300,7 +300,9 @@ class GuestsWidget(QWidget):
             "Name", "ID Number", "Nationality", "Phone",
             "Email", "VIP Status", "Last Stay", "Actions"
         ])
-        self.guest_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.guest_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        for i in range(1, 8):
+            self.guest_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
         self.guest_table.verticalHeader().setDefaultSectionSize(50)  # Make rows thicker
         main_layout.addWidget(self.guest_table)
         

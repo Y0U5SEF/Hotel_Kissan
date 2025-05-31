@@ -1,6 +1,9 @@
 import uuid
 import platform
+import hashlib
+import secrets
 from app.core.config_handler import app_config
+from app.core.db import get_user_by_username, create_user
 
 class MachineAuthorizer:
     def __init__(self, check_enabled=True):
@@ -36,3 +39,56 @@ class MachineAuthorizer:
     def get_machine_id(self):
         """Return the machine ID"""
         return self.machine_id
+
+class UserAuthenticator:
+    def __init__(self):
+        self.current_user = None
+    
+    def hash_password(self, password, salt=None):
+        """Hash a password with a salt"""
+        if salt is None:
+            salt = secrets.token_hex(16)
+        hash_obj = hashlib.sha256()
+        hash_obj.update((password + salt).encode())
+        return salt + hash_obj.hexdigest()
+    
+    def verify_password(self, password, stored_hash):
+        """Verify a password against its hash"""
+        salt = stored_hash[:32]  # First 32 characters are the salt
+        hash_obj = hashlib.sha256()
+        hash_obj.update((password + salt).encode())
+        return stored_hash[32:] == hash_obj.hexdigest()
+    
+    def authenticate(self, username, password):
+        """Authenticate a user"""
+        user = get_user_by_username(username)
+        if not user:
+            return False
+        
+        if not user['is_active']:
+            return False
+        
+        if not self.verify_password(password, user['password_hash']):
+            return False
+        
+        self.current_user = user
+        return True
+    
+    def create_new_user(self, username, password, first_name, last_name, role):
+        """Create a new user account"""
+        password_hash = self.hash_password(password)
+        return create_user(username, password_hash, first_name, last_name, role)
+    
+    def get_current_user(self):
+        """Get the currently authenticated user"""
+        return self.current_user
+    
+    def get_full_name(self):
+        """Get the full name of the current user"""
+        if self.current_user:
+            return f"{self.current_user['first_name']} {self.current_user['last_name']}"
+        return None
+    
+    def logout(self):
+        """Log out the current user"""
+        self.current_user = None

@@ -375,7 +375,7 @@ class ReservationsWidget(QWidget):
                 selection-color: white;
             }
             QCalendarWidget QAbstractItemView:enabled {
-                font-size: 14px;
+                font-size: 18px;
                 color: #2c3e50;
                 background-color: white;
                 selection-background-color: #3498db;
@@ -653,9 +653,13 @@ class ReservationsWidget(QWidget):
             "Checked-in": QTextCharFormat()
         }
         status_formats["Confirmed"].setBackground(QColor("#27ae60"))
+        status_formats["Confirmed"].setForeground(QColor("white"))
         status_formats["Pending"].setBackground(QColor("#f1c40f"))
+        status_formats["Pending"].setForeground(QColor("white"))
         status_formats["Cancelled"].setBackground(QColor("#e74c3c"))
+        status_formats["Cancelled"].setForeground(QColor("white"))
         status_formats["Checked-in"].setBackground(QColor("#3498db"))
+        status_formats["Checked-in"].setForeground(QColor("white"))
         
         # Clear existing formats
         self.calendar.setDateTextFormat(QDate(), QTextCharFormat())
@@ -789,8 +793,8 @@ class ReservationsWidget(QWidget):
 
     def setup_new_reservation_tab(self):
         layout = QVBoxLayout(self.new_reservation_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        layout.setContentsMargins(0, 0, 0, 20)
+        layout.setSpacing(0)
 
         # Progress indicator
         progress_frame = QFrame()
@@ -890,7 +894,7 @@ class ReservationsWidget(QWidget):
         self.arrival_date = QCalendarWidget()
         self.arrival_date.setMinimumDate(QDate.currentDate())
         self.arrival_date.setMinimumWidth(350)
-        self.arrival_date.setMinimumHeight(300)
+        self.arrival_date.setMinimumHeight(250)
         self.arrival_date.clicked.connect(self.update_room_selection)
         arrival_layout.addWidget(self.arrival_date)
 

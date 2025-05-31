@@ -347,6 +347,7 @@ class DashboardWidget(QWidget):
 
         # Occupancy Rate Trend (30%)
         charts_frame = QFrame()
+        charts_frame.setVisible(False)
         charts_frame.setObjectName("chartsFrame")
         charts_frame.setFrameShape(QFrame.Shape.StyledPanel)
         charts_layout = QVBoxLayout(charts_frame)
@@ -467,7 +468,7 @@ class DashboardWidget(QWidget):
 
     def load_room_grid(self):
         rooms = get_all_rooms()
-        cols = 3 if len(rooms) < 12 else 5
+        cols = 3 if len(rooms) < 12 else 6
         for i in reversed(range(self.room_grid.count())):
             widget = self.room_grid.itemAt(i).widget()
             if widget:

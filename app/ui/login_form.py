@@ -1,18 +1,20 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, 
     QPushButton, QHBoxLayout, QSpacerItem, 
-    QSizePolicy, QFrame
+    QSizePolicy, QFrame, QMessageBox
 )
 from PyQt6.QtGui import QPixmap, QIcon
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtCore import pyqtSignal
 from app.core.config_handler import app_config
+from app.core.auth import UserAuthenticator
 
 
 class LoginForm(QWidget):
     login_successful = pyqtSignal()
     def __init__(self):
         super().__init__()
+        self.authenticator = UserAuthenticator()
         self.setup_ui()
         self.load_styles()
         
@@ -151,18 +153,33 @@ class LoginForm(QWidget):
                 padding-left: 10px;
             }
             
-
-            
             QWidget {
                 background-color: #f5f7fa;
             }
         """)
+    
     def handle_login(self):
-        # Simple login validation logic
-        username = self.username_field.text()
+        """Handle login button click"""
+        username = self.username_field.text().strip()
         password = self.password_field.text()
         
-        # For development purposes, accept any non-empty credentials
-        # In production, this would validate against a database
-        if username and password:
-            self.login_successful.emit()  # Emit signal on success
+        if not username or not password:
+            QMessageBox.warning(
+                self,
+                "Login Error",
+                "Please enter both username and password.",
+                QMessageBox.StandardButton.Ok
+            )
+            return
+        
+        if self.authenticator.authenticate(username, password):
+            self.login_successful.emit()
+        else:
+            QMessageBox.warning(
+                self,
+                "Login Failed",
+                "Invalid username or password.",
+                QMessageBox.StandardButton.Ok
+            )
+            self.password_field.clear()
+            self.password_field.setFocus()

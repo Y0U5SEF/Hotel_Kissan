@@ -9,6 +9,22 @@ def get_connection():
 def init_db():
     conn = get_connection()
     c = conn.cursor()
+    
+    # Create users table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            role TEXT NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create guests table
     c.execute('''
         CREATE TABLE IF NOT EXISTS guests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +68,7 @@ def init_db():
             total_paid REAL,
             amount_due REAL,
             payment_method TEXT,
-            payment_status TEXT,
+            status TEXT,
             actual_departure TEXT,
             FOREIGN KEY (guest_id) REFERENCES guests (id),
             FOREIGN KEY (room_id) REFERENCES rooms (id)
@@ -277,7 +293,7 @@ def insert_checkin(checkin):
         INSERT INTO check_ins (
             checkin_id, transaction_id, guest_id, room_id, checkin_date, 
             arrival_date, departure_date, num_guests, total_paid, 
-            amount_due, payment_method, payment_status
+            amount_due, payment_method, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         checkin['checkin_id'],
@@ -291,7 +307,7 @@ def insert_checkin(checkin):
         checkin['total_paid'],
         checkin['amount_due'],
         checkin['payment_method'],
-        checkin['payment_status']
+        checkin['status']
     ))
     conn.commit()
     conn.close()
@@ -336,14 +352,14 @@ def update_checkin(checkin_id, checkin):
             total_paid = ?,
             amount_due = ?,
             payment_method = ?,
-            payment_status = ?,
+            status = ?,
             actual_departure = ?
         WHERE checkin_id = ?
     ''', (
         checkin['total_paid'],
         checkin['amount_due'],
         checkin['payment_method'],
-        checkin['payment_status'],
+        checkin['status'],
         checkin.get('actual_departure'),
         checkin_id
     ))
@@ -730,32 +746,29 @@ def get_cancellation_details(reservation_id):
     conn.close()
     return cancellation 
 
-def get_filtered_checkins(from_date, to_date, room_type="All", status="All"):
+def get_filtered_checkins(from_date, to_date, room_type=None, status=None):
     conn = get_connection()
     c = conn.cursor()
 
-    query = """
-        SELECT ci.checkin_id,
-               g.first_name || ' ' || g.last_name AS guest_name,
-               r.number AS room_number,
-               ci.arrival_date,
-               ci.departure_date,
-               ci.payment_status,
-               ci.payment_status AS status
-        FROM check_ins ci
-        JOIN guests g ON ci.guest_id = g.id
-        JOIN rooms r ON ci.room_id = r.id
-        WHERE date(ci.arrival_date) BETWEEN ? AND ?
-    """
+    query = '''
+        SELECT c.checkin_id, g.first_name || ' ' || g.last_name AS guest_name,
+               r.number as room_number, c.arrival_date, c.departure_date, c.status
+        FROM check_ins c
+        LEFT JOIN guests g ON c.guest_id = g.id
+        LEFT JOIN rooms r ON c.room_id = r.id
+        WHERE date(c.arrival_date) BETWEEN ? AND ?
+    '''
     params = [from_date, to_date]
 
-    if room_type != "All":
-        query += " AND r.type = ?"
-        params.append(room_type)
+    if room_type and room_type != "All":
+        query += " AND LOWER(r.type) = ?"
+        params.append(room_type.lower())
 
-    if status != "All":
-        query += " AND ci.payment_status = ?"
-        params.append(status)
+    if status and status != "All":
+        query += " AND LOWER(c.status) = ?"
+        params.append(status.lower())
+
+    query += " ORDER BY c.arrival_date DESC"
 
     c.execute(query, params)
     columns = [desc[0] for desc in c.description]
@@ -789,3 +802,71 @@ def get_filtered_reservations(from_date, to_date, room_type="All", status="All")
     results = [dict(zip(columns, row)) for row in c.fetchall()]
     conn.close()
     return results
+
+def get_all_reservations():
+    """Get all reservations from the database"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT r.*, rm.number as room_number 
+        FROM reservations r
+        LEFT JOIN rooms rm ON r.room_id = rm.id
+        ORDER BY r.created_on DESC
+    ''')
+    columns = [desc[0] for desc in c.description]
+    reservations = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return reservations
+
+# User Authentication Functions
+def create_user(username, password_hash, first_name, last_name, role):
+    """Create a new user in the database"""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute('''
+            INSERT INTO users (username, password_hash, first_name, last_name, role)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (username, password_hash, first_name, last_name, role))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def get_user_by_username(username):
+    """Get user by username"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM users WHERE username = ?', (username,))
+    columns = [desc[0] for desc in c.description]
+    user = c.fetchone()
+    conn.close()
+    return dict(zip(columns, user)) if user else None
+
+def update_user_password(user_id, new_password_hash):
+    """Update user's password"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('UPDATE users SET password_hash = ? WHERE id = ?', (new_password_hash, user_id))
+    conn.commit()
+    conn.close()
+
+def deactivate_user(user_id):
+    """Deactivate a user account"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('UPDATE users SET is_active = 0 WHERE id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+
+def get_all_users():
+    """Get all users from the database"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT id, username, first_name, last_name, role, is_active, created_at FROM users')
+    columns = [desc[0] for desc in c.description]
+    users = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return users

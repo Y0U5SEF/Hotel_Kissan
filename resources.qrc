@@ -19,6 +19,8 @@
     <file alias="icons/occupancy.png">app/resources/icons/occupancy.png</file>
     <file alias="icons/password.png">app/resources/icons/password.png</file>
     <file alias="icons/person_96px.png">app/resources/icons/person_96px.png</file>
+    <file alias="icons/pdf_48px.png">app/resources/icons/pdf_48px.png</file>
+    <file alias="icons/google_sheets_48px.png">app/resources/icons/google_sheets_48px.png</file>
     <file alias="icons/reports.png">app/resources/icons/reports.png</file>
     <file alias="icons/revenue_month.png">app/resources/icons/revenue_month.png</file>
     <file alias="icons/revenue_today.png">app/resources/icons/revenue_today.png</file>
