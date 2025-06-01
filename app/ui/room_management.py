@@ -146,27 +146,46 @@ class RoomManagementWidget(QWidget):
         
         form = QFormLayout()
         
-        # Get the last room number from the database
+        # Get all existing rooms
         rooms = get_all_rooms()
-        last_room_number = 0
+        
+        # Find the last room number for regular rooms and suites
+        last_regular_number = 0
+        last_suite_number = 0
+        
         for room in rooms:
             try:
-                room_num = int(room['number'])
-                last_room_number = max(last_room_number, room_num)
-            except ValueError:
+                if room['type'].lower() == 'suite':
+                    # Extract number from "Suite X" format
+                    suite_num = int(room['number'].split()[-1])
+                    last_suite_number = max(last_suite_number, suite_num)
+                else:
+                    room_num = int(room['number'])
+                    last_regular_number = max(last_regular_number, room_num)
+            except (ValueError, IndexError):
                 continue
         
-        # Next room number will be last number + 1
-        next_room_number = str(last_room_number + 1)
+        # Next room numbers
+        next_regular_number = str(last_regular_number + 1)
+        next_suite_number = f"Suite {last_suite_number + 1}"
         
         # Show next room number in a label
-        room_number_label = QLabel(f"Room Number: {next_room_number}")
+        room_number_label = QLabel(f"Room Number: {next_regular_number}")
         room_number_label.setStyleSheet("font-weight: bold; color: #2196F3;")
         form.addRow(room_number_label)
         
         room_type = QComboBox()
         room_type.addItems(["Single", "Double", "Suite", "Deluxe"])
         room_type.setEditable(True)
+        
+        # Update room number when type changes
+        def update_room_number(type_text):
+            if type_text.lower() == 'suite':
+                room_number_label.setText(f"Room Number: {next_suite_number}")
+            else:
+                room_number_label.setText(f"Room Number: {next_regular_number}")
+        
+        room_type.currentTextChanged.connect(update_room_number)
         form.addRow("Room Type:", room_type)
         
         beds = QSpinBox()
@@ -198,8 +217,11 @@ class RoomManagementWidget(QWidget):
         layout.addWidget(buttons)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Determine room number based on type
+            room_number = next_suite_number if room_type.currentText().lower() == 'suite' else next_regular_number
+            
             room = {
-                'number': next_room_number,
+                'number': room_number,
                 'type': room_type.currentText(),
                 'beds': beds.value(),
                 'floor': floor.text(),
@@ -257,9 +279,42 @@ class RoomManagementWidget(QWidget):
         layout.addWidget(buttons)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Get the new room type
+            new_type = room_type.currentText()
+            old_type = room.get('type', '')
+            
+            # Handle room number based on type change
+            if new_type.lower() == 'suite' and old_type.lower() != 'suite':
+                # Converting to suite - get the next suite number
+                rooms = get_all_rooms()
+                last_suite_number = 0
+                for r in rooms:
+                    if r['type'].lower() == 'suite':
+                        try:
+                            suite_num = int(r['number'].split()[-1])
+                            last_suite_number = max(last_suite_number, suite_num)
+                        except (ValueError, IndexError):
+                            continue
+                new_number = f"Suite {last_suite_number + 1}"
+            elif old_type.lower() == 'suite' and new_type.lower() != 'suite':
+                # Converting from suite to regular room - get the next regular number
+                rooms = get_all_rooms()
+                last_regular_number = 0
+                for r in rooms:
+                    if r['type'].lower() != 'suite':
+                        try:
+                            room_num = int(r['number'])
+                            last_regular_number = max(last_regular_number, room_num)
+                        except ValueError:
+                            continue
+                new_number = str(last_regular_number + 1)
+            else:
+                # No type change, keep the same number
+                new_number = room['number']
+            
             updated_room = {
-                'number': room['number'],  # Keep the original room number
-                'type': room_type.currentText(),
+                'number': new_number,
+                'type': new_type,
                 'beds': beds.value(),
                 'floor': floor.text(),
                 'location': location.text(),
@@ -420,22 +475,37 @@ class RoomManagementWidget(QWidget):
         layout.addWidget(buttons)
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Get the last room number from the database
+            # Get all existing rooms
             rooms = get_all_rooms()
-            last_room_number = 0
+            
+            # Find the last room number for regular rooms and suites
+            last_regular_number = 0
+            last_suite_number = 0
+            
             for room in rooms:
                 try:
-                    room_num = int(room['number'])
-                    last_room_number = max(last_room_number, room_num)
-                except ValueError:
+                    if room['type'].lower() == 'suite':
+                        # Extract number from "Suite X" format
+                        suite_num = int(room['number'].split()[-1])
+                        last_suite_number = max(last_suite_number, suite_num)
+                    else:
+                        room_num = int(room['number'])
+                        last_regular_number = max(last_regular_number, room_num)
+                except (ValueError, IndexError):
                     continue
             
             # Start from the next number after the last room
-            start_num = last_room_number + 1
+            start_num = last_regular_number + 1
+            start_suite_num = last_suite_number + 1
             
             for i in range(num_rooms.value()):
+                if room_type.currentText().lower() == 'suite':
+                    room_number = f"Suite {start_suite_num + i}"
+                else:
+                    room_number = str(start_num + i)
+                    
                 room = {
-                    'number': str(start_num + i),
+                    'number': room_number,
                     'type': room_type.currentText(),
                     'beds': beds.value(),
                     'floor': floor.text(),
@@ -443,9 +513,10 @@ class RoomManagementWidget(QWidget):
                     'status': status.currentText()
                 }
                 insert_room(room)
+                
             self.load_rooms()
             QMessageBox.information(
                 self,
                 "Success",
-                f"Successfully added {num_rooms.value()} rooms starting from {start_num}"
+                f"Successfully added {num_rooms.value()} {room_type.currentText()} rooms"
             ) 

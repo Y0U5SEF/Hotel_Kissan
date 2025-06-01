@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDateTime, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QPainter, QIcon
 from PyQt6.QtCharts import QChart, QChartView, QLineSeries, QPieSeries
-from app.core.db import get_all_rooms, get_available_rooms_count, get_reservations
+from app.core.db import get_all_rooms, get_available_rooms_count, get_reservations, get_all_checkins
 from datetime import datetime
 
 class KPIWidget(QFrame):
@@ -473,6 +473,10 @@ class DashboardWidget(QWidget):
             widget = self.room_grid.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
+        
+        # Get all check-ins to find guest information for occupied rooms
+        checkins = get_all_checkins()
+        
         for idx, room in enumerate(rooms):
             btn = QPushButton(f"{room['number']}\n{room.get('type','')}")
             btn.setMinimumSize(80, 60)
@@ -518,7 +522,23 @@ class DashboardWidget(QWidget):
                         background: #e74c3c;
                     }
                 """)
+            
+            # Build tooltip with room and guest information
             tooltip = f"Room {room['number']}\nType: {room.get('type','')}\nStatus: {status}"
+            
+            # Add guest information for occupied rooms
+            if status == "Occupied":
+                # Find the active check-in for this room
+                active_checkin = next(
+                    (c for c in checkins 
+                     if c['room_id'] == room['id'] 
+                     and c['status'] == 'checked_in'),
+                    None
+                )
+                if active_checkin:
+                    guest_name = f"{active_checkin['first_name']} {active_checkin['last_name']}"
+                    tooltip += f"\nGuest: {guest_name}"
+            
             btn.setToolTip(tooltip)
             btn.setStyleSheet(btn.styleSheet() + """
                 QToolTip {

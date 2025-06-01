@@ -1503,6 +1503,9 @@ class CheckInWidget(QWidget):
     def reset_wizard_fields(self):
         """Reset all fields in the wizard for a new check-in"""
         try:
+            # Generate new IDs for the next check-in
+            self.checkin_id = str(uuid.uuid4())[:8]
+            self.transaction_id = str(uuid.uuid4())[:8]
             # Clear search and guest selection
             self.guest_select_combo.clear()
             self.guest_select_combo.clear()
