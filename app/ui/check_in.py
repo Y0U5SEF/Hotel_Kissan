@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # TAX_RATE = Decimal('0.10') # This constant is no longer directly used for calculation
 ROOM_GRID_COLS = 5
 MIN_NIGHTS = 1
-MAX_NIGHTS = 30
+MAX_NIGHTS = 60
 MIN_GUESTS = 1
 MAX_GUESTS = 10
 RECEIPTS_DIR = os.path.join(os.getcwd(), "receipts")
@@ -177,8 +177,11 @@ class CheckInWidget(QWidget):
         if tab_name == "Check-ins":
             self.load_checkin_list()
         elif tab_name == "New Check-in":
+            self.transaction_id = str(uuid.uuid4())[:8]  # reset each time
+            self.checkin_id = str(uuid.uuid4())[:8]
+            self.selected_room_id = None
             self.reload_guests_for_search()
-            self.load_room_grid() # Ensure room grid is fresh when starting new check-in
+            self.load_room_grid()
         elif tab_name == "Check-out":
             self.load_checked_in_guests()
             self.populate_tax_options() # Populate tax options when entering checkout tab
@@ -306,17 +309,18 @@ class CheckInWidget(QWidget):
         
         # Guest select combo
         self.guest_select_combo = QComboBox()
-        self.populate_guest_combo()
-        self.guest_select_combo.currentIndexChanged.connect(self.on_guest_selected)
+        self.guest_select_combo.setEditable(True)  # Make combo box editable
+        self.guest_select_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)  # Prevent adding new items
         self.guest_select_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        search_container_layout.addWidget(self.guest_select_combo, 1)  # Stretch factor of 1
+        self.guest_select_combo.currentIndexChanged.connect(self.on_guest_selected)
+        self.guest_select_combo.setPlaceholderText("Search and select guest...")  # Add placeholder text
+        search_container_layout.addWidget(self.guest_select_combo)
         
-        # Search input
-        self.guest_search = QLineEdit()
-        self.guest_search.setPlaceholderText("Search guest...")
-        self.guest_search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.guest_search.textChanged.connect(self.filter_guest_dropdown) # Connect search to filter
-        search_container_layout.addWidget(self.guest_search, 1)  # Stretch factor of 1
+        # Create completer for guest search
+        self.guest_completer = QCompleter()
+        self.guest_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.guest_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.guest_select_combo.setCompleter(self.guest_completer)
         
         s1_layout.addWidget(search_container)
         
@@ -375,7 +379,8 @@ class CheckInWidget(QWidget):
         arrival_layout.addWidget(arrival_label)
         
         self.arrival_date = QCalendarWidget()
-        self.arrival_date.setMinimumDate(QDate.currentDate())
+        # self.arrival_date.setMinimumDate(QDate.currentDate())
+        # Removed minimum date restriction to allow past dates
         self.arrival_date.setMinimumWidth(350)
         self.arrival_date.setMinimumHeight(250)
         self.arrival_date.clicked.connect(self.update_payment_amount)
@@ -1499,7 +1504,7 @@ class CheckInWidget(QWidget):
         """Reset all fields in the wizard for a new check-in"""
         try:
             # Clear search and guest selection
-            self.guest_search.clear()
+            self.guest_select_combo.clear()
             self.guest_select_combo.clear()
             self.populate_guest_combo()  # Repopulate the dropdown
             
@@ -1583,17 +1588,28 @@ class CheckInWidget(QWidget):
 
     def filter_guest_dropdown(self):
         """Filter the guest dropdown based on search text"""
-        search_text = self.guest_search.text().lower()
+        search_text = self.guest_select_combo.currentText().lower()
         self.guest_select_combo.clear()
         
         # Add the "--Select guest--" option at the beginning
         self.guest_select_combo.addItem("--Select guest--", None)
 
-        # Add filtered guests to dropdown
+        # Create a list of matching guests
+        matching_guests = []
         for guest in self.guests_data:
             full_name = f"{guest['first_name']} {guest['last_name']}"
             if search_text in full_name.lower():
-                self.guest_select_combo.addItem(full_name, guest)
+                matching_guests.append((full_name, guest))
+        
+        # Sort matching guests by name
+        matching_guests.sort(key=lambda x: x[0].lower())
+        
+        # Add filtered guests to dropdown
+        for full_name, guest in matching_guests:
+            self.guest_select_combo.addItem(full_name, guest)
+        
+        # Update completer with current matches
+        self.guest_completer.setModel(self.guest_select_combo.model())
         
         # Ensure the UI is updated after filtering
         self.update_wizard_ui()

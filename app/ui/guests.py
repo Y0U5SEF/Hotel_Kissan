@@ -408,13 +408,57 @@ class GuestsWidget(QWidget):
             self.load_guests()
             self.guest_data_changed.emit()
 
-    
-            
     def search_guests(self):
         """Search guests based on input"""
         search_text = self.search_input.text().lower()
-        # Implement search logic here
         
+        # Get all guests from the database
+        all_guests = get_all_guests()
+        
+        # Filter guests based on search text
+        filtered_guests = []
+        for guest in all_guests:
+            full_name = f"{guest['first_name']} {guest['last_name']}".lower()
+            if search_text in full_name:
+                filtered_guests.append(guest)
+        
+        # Update the table with filtered results
+        self.guest_table.setRowCount(len(filtered_guests))
+        for row, guest in enumerate(filtered_guests):
+            name = f"{guest['first_name']} {guest['last_name']}"
+            self.guest_table.setItem(row, 0, QTableWidgetItem(name))
+            self.guest_table.setItem(row, 1, QTableWidgetItem(guest.get('id_number') or ""))
+            self.guest_table.setItem(row, 2, QTableWidgetItem(guest.get('nationality') or ""))
+            phone = f"{guest.get('phone_code') or ''} {guest.get('phone_number') or ''}"
+            self.guest_table.setItem(row, 3, QTableWidgetItem(phone.strip()))
+            self.guest_table.setItem(row, 4, QTableWidgetItem(guest.get('email') or ""))
+            self.guest_table.setItem(row, 5, QTableWidgetItem(guest.get('vip_status') or ""))
+            self.guest_table.setItem(row, 6, QTableWidgetItem("-"))  # Last Stay placeholder
+            
+            # Create action buttons widget
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout(actions_widget)
+            actions_layout.setContentsMargins(5, 0, 5, 0)
+            actions_layout.setSpacing(10)
+            
+            edit_btn = QPushButton("Edit")
+            edit_btn.setObjectName("tableActionButton")
+            edit_btn.setProperty("action", "edit")
+            edit_btn.setFixedWidth(80)
+            edit_btn.clicked.connect(lambda _, g=guest: self.edit_guest(g))
+            
+            delete_btn = QPushButton("Delete")
+            delete_btn.setObjectName("tableActionButton")
+            delete_btn.setProperty("action", "delete")
+            delete_btn.setFixedWidth(80)
+            delete_btn.clicked.connect(lambda _, g=guest: self.delete_guest(g))
+            
+            actions_layout.addWidget(edit_btn)
+            actions_layout.addWidget(delete_btn)
+            actions_layout.addStretch()
+            
+            self.guest_table.setCellWidget(row, 7, actions_widget)
+
     def on_guest_selected(self):
         """Handle guest selection"""
         selected_items = self.guest_table.selectedItems()
