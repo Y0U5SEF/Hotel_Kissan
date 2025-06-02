@@ -199,7 +199,7 @@ class RoomManagementWidget(QWidget):
         form.addRow("Location:", location)
         
         status = QComboBox()
-        status.addItems(["Vacant", "Occupied", "Dirty", "Clean", "Out of Order"])
+        status.addItems(["Vacant", "Occupied", "Dirty", "Clean", "Out of Order", "Not Available"])
         form.addRow("Status:", status)
         
         buttons = QDialogButtonBox(
@@ -264,7 +264,7 @@ class RoomManagementWidget(QWidget):
         form.addRow("Location:", location)
         
         status = QComboBox()
-        status.addItems(["Vacant", "Occupied", "Dirty", "Clean", "Out of Order"])
+        status.addItems(["Vacant", "Occupied", "Dirty", "Clean", "Out of Order", "Not Available"])
         status.setCurrentText(room.get('status', 'Vacant'))
         form.addRow("Status:", status)
         
@@ -461,7 +461,7 @@ class RoomManagementWidget(QWidget):
         
         # Status
         status = QComboBox()
-        status.addItems(["Vacant", "Occupied", "Dirty", "Clean", "Out of Order"])
+        status.addItems(["Vacant", "Occupied", "Dirty", "Clean", "Out of Order", "Not Available"])
         form.addRow("Status:", status)
         
         buttons = QDialogButtonBox(

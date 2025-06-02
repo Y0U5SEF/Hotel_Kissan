@@ -319,6 +319,19 @@ class DashboardWidget(QWidget):
         occupied_layout.addWidget(occupied_color)
         occupied_layout.addWidget(occupied_text)
         legend_layout.addWidget(occupied_legend)
+
+        # Not Available (Gray)
+        not_available_legend = QWidget()
+        not_available_layout = QHBoxLayout(not_available_legend)
+        not_available_layout.setContentsMargins(0, 0, 0, 0)
+        not_available_layout.setSpacing(5)
+        not_available_color = QLabel()
+        not_available_color.setFixedSize(16, 16)
+        not_available_color.setStyleSheet("background-color: #95a5a6; border: 1px solid #ccc;")
+        not_available_text = QLabel("Not Available")
+        not_available_layout.addWidget(not_available_color)
+        not_available_layout.addWidget(not_available_text)
+        legend_layout.addWidget(not_available_legend)
         
         legend_layout.addStretch()
         room_grid_layout.addLayout(legend_layout)
@@ -509,6 +522,19 @@ class DashboardWidget(QWidget):
                         background: #9b59b6;
                     }
                 """)
+            elif status == "Not Available":
+                btn.setStyleSheet("""
+                    QPushButton {
+                        min-height:50px;
+                        background: #95a5a6;
+                        color: white;
+                        font-weight: bold;
+                        border-radius: 0px;
+                    }
+                    QPushButton:hover {
+                        background: #7f8c8d;
+                    }
+                """)
             else:  # Occupied or other statuses
                 btn.setStyleSheet("""
                     QPushButton {
@@ -560,21 +586,22 @@ class DashboardWidget(QWidget):
         self.occupancy_kpi.update_value(str(occupancy_rate), "%")
 
     def update_arrivals_departures(self):
-        """Update arrivals and departures counts based on today's reservations"""
+        """Update arrivals and departures counts based on today's check-ins and check-outs"""
         today = datetime.now().strftime('%Y-%m-%d')
         arrivals_count = 0
         departures_count = 0
         
-        # Get all reservations
-        reservations = get_reservations()
+        # Get all check-ins
+        checkins = get_all_checkins()
         
-        for reservation in reservations:
-            # Check if arrival date is today
-            if reservation['arrival_date'] == today:
+        for checkin in checkins:
+            # Count arrivals (check-ins) for today
+            if checkin['arrival_date'] == today:
                 arrivals_count += 1
-            # Check if departure date is today (removed)
-            # if reservation['departure_date'] == today:
-            #     departures_count += 1
+                
+            # Count departures (check-outs) for today
+            if checkin['departure_date'] == today:
+                departures_count += 1
         
         # Update KPI widgets
         self.arrivals_kpi.update_value(str(arrivals_count))

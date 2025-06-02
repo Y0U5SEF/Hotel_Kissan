@@ -454,26 +454,22 @@ class CheckInWidget(QWidget):
         legend_layout = QHBoxLayout(legend_frame)
         
         status_colors = {
-            "Vacant": "#27ae60",
-            "Occupied": "#c0392b",
-            # "Dirty": "#e67e22",
-            # "Clean": "#2980b9",
-            # "Out of Order": "#7f8c8d",
-            "Reserved": "#8e44ad"
+            "Available": "#27ae60",   # Green
+            "Reserved": "#8e44ad",    # Purple
+            "Occupied": "#c0392b",    # Red
+            "Not Available": "#95a5a6", # Gray
+            "Needs Cleaning": "#f1c40f" # Yellow
         }
         
         for status, color in status_colors.items():
             legend_item = QWidget()
             legend_item_layout = QHBoxLayout(legend_item)
             legend_item_layout.setSpacing(5)
-            
             color_box = QLabel()
             color_box.setFixedSize(20, 20)
             color_box.setStyleSheet(f"background-color: {color}; border-radius: 4px;")
-            
             status_label = QLabel(status)
             status_label.setStyleSheet("color: #2c3e50;")
-            
             legend_item_layout.addWidget(color_box)
             legend_item_layout.addWidget(status_label)
             legend_layout.addWidget(legend_item)
@@ -1669,11 +1665,11 @@ class CheckInWidget(QWidget):
 
     def _room_color(self, status):
         return {
-            "Vacant": "#27ae60",
+            "Available": "#27ae60",
+            "Reserved": "#8e44ad",
             "Occupied": "#c0392b",
-            "Dirty": "#e67e22",
-            "Clean": "#2980b9",
-            "Out of Order": "#7f8c8d"
+            "Not Available": "#95a5a6",
+            "Needs Cleaning": "#f1c40f"
         }.get(status, "#bdc3c7")
 
     def select_room(self, room_id):
