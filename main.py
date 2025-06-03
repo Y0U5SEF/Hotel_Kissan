@@ -8,10 +8,11 @@ from app.core.auth import MachineAuthorizer
 from app.resources.resources import register_resources, unregister_resources
 from app.core.db import init_db
 import resources_rc  # type: ignore # noqa: F401 (registers Qt resources)
+from app.core.dev_config import DEV_MODE  # <-- moved here
 
 
 # Development mode flag - Set to False for production
-DEV_MODE = True  
+DEV_MODE = False  # <-- removed
 
 class HotelManagementApp:
     def __init__(self):
@@ -55,11 +56,13 @@ class HotelManagementApp:
         self.main_window = MainWindow()
         self.main_window.show()
         
-    def on_login_success(self):
+    def on_login_success(self, full_name):
         """Handle successful login"""
         if self.login_window:
             self.login_window.close()
         self.show_main_window()
+        if self.main_window:
+            self.main_window.on_login_successful(full_name)
     
     def run(self):
         """Run application event loop"""

@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QStatusBar, QStackedWidget,
     QFrame, QTableWidget, QTableWidgetItem, QDialog, QFormLayout,
-    QDialogButtonBox, QLineEdit, QDoubleSpinBox, QHeaderView, QComboBox
+    QDialogButtonBox, QLineEdit, QDoubleSpinBox, QHeaderView, QComboBox, QMessageBox
 )
 from PyQt6.QtGui import QIcon, QFont
 from PyQt6.QtCore import Qt, QSize
@@ -22,6 +22,7 @@ from app.ui.styles import MAIN_STYLESHEET
 from PyQt6.QtCore import pyqtSignal
 from app.ui.reports import ReportsWidget
 from app.core.auth import UserAuthenticator
+from app.core.dev_config import DEV_MODE
 
 
 class MainWindow(QMainWindow):
@@ -35,6 +36,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.authenticator = UserAuthenticator()
+        self.user_name = "Developer" if DEV_MODE else ""  # Initialize user name based on DEV_MODE
         self.setup_ui()
         self.load_styles()
         self.guests_widget.guest_data_changed.connect(self.checkin_widget.reload_guests_for_search)
@@ -111,21 +113,30 @@ class MainWindow(QMainWindow):
         hotel_label.setObjectName("hotelName")
         top_layout.addWidget(hotel_label)
         
+        # Add stretch to push user info to the right
+        top_layout.addStretch()
+        
         # User info and logout
         user_widget = QWidget()
         user_layout = QHBoxLayout(user_widget)
         user_layout.setSpacing(15)
+        user_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Get current user info
-        user_name = self.authenticator.get_full_name() or "Not logged in"
+        # Person icon
+        person_icon = QLabel()
+        person_icon.setPixmap(QIcon("app/resources/icons/person_96px.png").pixmap(QSize(24, 24)))
+        user_layout.addWidget(person_icon)
         
-        user_label = QLabel(user_name)
-        user_label.setObjectName("userName")
-        user_layout.addWidget(user_label)
+        # User name
+        self.user_label = QLabel(self.user_name)
+        self.user_label.setObjectName("userName")
+        self.user_label.setStyleSheet("font-weight: bold;")
+        user_layout.addWidget(self.user_label)
         
+        # Logout button
         logout_btn = QPushButton()
         logout_btn.setObjectName("logoutButton")
-        logout_btn.setIcon(QIcon(":/icons/logout.png"))
+        logout_btn.setIcon(QIcon("app/resources/icons/logout.png"))
         logout_btn.setIconSize(QSize(20, 20))
         logout_btn.setFixedSize(32, 32)
         logout_btn.setToolTip("Logout")
@@ -413,5 +424,28 @@ class MainWindow(QMainWindow):
 
     def handle_logout(self):
         """Handle logout button click"""
-        self.authenticator.logout()
-        self.close()
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self,
+            'Confirm Logout',
+            'Are you sure you want to logout?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.authenticator.logout()
+            self.hide()  # Hide instead of close to keep the window instance alive
+            
+            # Show login form again
+            from app.ui.login_form import LoginForm
+            self.login_form = LoginForm()
+            self.login_form.login_successful.connect(self.on_login_successful)
+            self.login_form.show()
+            
+    def on_login_successful(self, full_name):
+        """Handle successful login"""
+        self.user_name = full_name
+        self.user_label.setText(full_name.upper())
+        self.show()  # Show the main window again
+        self.login_form = None  # Clear the reference to the login form

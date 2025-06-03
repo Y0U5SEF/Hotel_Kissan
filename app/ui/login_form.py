@@ -11,7 +11,7 @@ from app.core.auth import UserAuthenticator
 
 
 class LoginForm(QWidget):
-    login_successful = pyqtSignal()
+    login_successful = pyqtSignal(str)
     def __init__(self):
         super().__init__()
         self.authenticator = UserAuthenticator()
@@ -173,7 +173,10 @@ class LoginForm(QWidget):
             return
         
         if self.authenticator.authenticate(username, password):
-            self.login_successful.emit()
+            # Get user's full name from authenticator
+            full_name = self.authenticator.get_full_name()
+            self.login_successful.emit(full_name)
+            self.close()  # Close the login form after successful login
         else:
             QMessageBox.warning(
                 self,

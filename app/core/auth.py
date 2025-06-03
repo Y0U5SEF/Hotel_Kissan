@@ -1,6 +1,6 @@
 import uuid
 import platform
-import hashlib
+import bcrypt
 import secrets
 from app.core.config_handler import app_config
 from app.core.db import get_user_by_username, create_user
@@ -45,19 +45,30 @@ class UserAuthenticator:
         self.current_user = None
     
     def hash_password(self, password, salt=None):
-        """Hash a password with a salt"""
+        """Hash a password using bcrypt"""
+        # Convert password to bytes if it's a string
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+        
+        # Generate salt if not provided
         if salt is None:
-            salt = secrets.token_hex(16)
-        hash_obj = hashlib.sha256()
-        hash_obj.update((password + salt).encode())
-        return salt + hash_obj.hexdigest()
+            salt = bcrypt.gensalt()
+        elif isinstance(salt, str):
+            salt = salt.encode('utf-8')
+            
+        # Hash the password
+        hashed = bcrypt.hashpw(password, salt)
+        return hashed.decode('utf-8')
     
     def verify_password(self, password, stored_hash):
-        """Verify a password against its hash"""
-        salt = stored_hash[:32]  # First 32 characters are the salt
-        hash_obj = hashlib.sha256()
-        hash_obj.update((password + salt).encode())
-        return stored_hash[32:] == hash_obj.hexdigest()
+        """Verify a password against its bcrypt hash"""
+        # Convert inputs to bytes
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+        if isinstance(stored_hash, str):
+            stored_hash = stored_hash.encode('utf-8')
+            
+        return bcrypt.checkpw(password, stored_hash)
     
     def authenticate(self, username, password):
         """Authenticate a user"""

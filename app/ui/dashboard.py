@@ -76,15 +76,18 @@ class ActivityItem(QFrame):
         super().__init__(parent)
         self.setObjectName("activityItem")
         self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         
         # Header with title and time
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(10)
         
         title_label = QLabel(title)
         title_label.setObjectName("activityTitle")
+        title_label.setWordWrap(True)
         header_layout.addWidget(title_label)
         
         time_label = QLabel(time)
@@ -219,32 +222,45 @@ class DashboardWidget(QWidget):
         # Quick Actions and Recent Reservations (40% combined)
         left_sidebar_frame = QFrame()
         left_sidebar_frame.setObjectName("leftSidebarFrame")
-        left_sidebar_frame.setFrameShape(QFrame.Shape.StyledPanel)
         left_sidebar_layout = QVBoxLayout(left_sidebar_frame)
         left_sidebar_layout.setSpacing(20)  # Add spacing between sections
         
         # Quick Actions Section
+        quick_actions_frame = QFrame()
+        quick_actions_frame.setObjectName("quickActionsFrame")
+        quick_actions_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        quick_actions_layout = QVBoxLayout(quick_actions_frame)
+        quick_actions_layout.setContentsMargins(10, 10, 10, 10)
+        
         quick_actions_title = QLabel("Quick Actions")
         quick_actions_title.setObjectName("sectionTitle")
-        left_sidebar_layout.addWidget(quick_actions_title)
+        quick_actions_layout.addWidget(quick_actions_title)
         
         check_in_btn = QuickActionButton("Check-In", ":/icons/checkin.png")
         check_in_btn.clicked.connect(self.check_in_clicked)
-        left_sidebar_layout.addWidget(check_in_btn)
+        quick_actions_layout.addWidget(check_in_btn)
         
         check_out_btn = QuickActionButton("Check-Out", ":/icons/checkout.png")
         check_out_btn.clicked.connect(self.check_out_clicked)
-        left_sidebar_layout.addWidget(check_out_btn)
+        quick_actions_layout.addWidget(check_out_btn)
         
         new_reservation_btn = QuickActionButton("New Reservation", ":/icons/reservation.png")
         new_reservation_btn.clicked.connect(self.new_reservation_clicked)
-        left_sidebar_layout.addWidget(new_reservation_btn)
+        quick_actions_layout.addWidget(new_reservation_btn)
+        
+        left_sidebar_layout.addWidget(quick_actions_frame)
         
         # Recent Reservations Section
+        reservations_frame = QFrame()
+        reservations_frame.setObjectName("reservationsFrame")
+        reservations_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        reservations_layout = QVBoxLayout(reservations_frame)
+        reservations_layout.setContentsMargins(10, 10, 10, 10)
+        
         reservations_title = QLabel("Recent Reservations")
         reservations_title.setObjectName("sectionTitle")
         reservations_title.setContentsMargins(0, 0, 0, 0)  # Remove margins from title
-        left_sidebar_layout.addWidget(reservations_title)
+        reservations_layout.addWidget(reservations_title)
         
         # Create scroll area for reservations
         reservations_scroll = QScrollArea()
@@ -254,12 +270,13 @@ class DashboardWidget(QWidget):
         
         # Create container for reservation cards
         reservations_container = QWidget()
-        reservations_container.setStyleSheet("background: transparent;")
         self.reservations_container_layout = QVBoxLayout(reservations_container)
         self.reservations_container_layout.setSpacing(10)
         self.reservations_container_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins from container layout
         reservations_scroll.setWidget(reservations_container)
-        left_sidebar_layout.addWidget(reservations_scroll)
+        reservations_layout.addWidget(reservations_scroll)
+        
+        left_sidebar_layout.addWidget(reservations_frame)
         
         # Add stretch at the end to push everything up
         left_sidebar_layout.addStretch()
@@ -356,7 +373,7 @@ class DashboardWidget(QWidget):
         # Set the grid container as the scroll area's widget
         scroll_area.setWidget(grid_container)
         room_grid_layout.addWidget(scroll_area)
-        dashboard_row.addWidget(room_grid_frame, 3) # Room grid keeps 30% of remaining space
+        dashboard_row.addWidget(room_grid_frame, 4) # Room grid keeps 30% of remaining space
 
         # Occupancy Rate Trend (30%)
         charts_frame = QFrame()
@@ -388,7 +405,7 @@ class DashboardWidget(QWidget):
         self.activity_container_layout = QVBoxLayout(activity_container)
         activity_scroll.setWidget(activity_container)
         activity_layout.addWidget(activity_scroll)
-        dashboard_row.addWidget(activity_frame, 2) # Recent activity keeps 20% of remaining space
+        dashboard_row.addWidget(activity_frame, 1) # Recent activity keeps 20% of remaining space
 
         main_layout.addLayout(dashboard_row)
         self.load_room_grid()
@@ -481,7 +498,7 @@ class DashboardWidget(QWidget):
 
     def load_room_grid(self):
         rooms = get_all_rooms()
-        cols = 3 if len(rooms) < 12 else 6
+        cols = 3 if len(rooms) < 12 else 8
         for i in reversed(range(self.room_grid.count())):
             widget = self.room_grid.itemAt(i).widget()
             if widget:
@@ -621,14 +638,28 @@ class DashboardWidget(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         
-        # Add new reservation cards (limit to 5 most recent)
-        for reservation in reservations[:5]:
-            guest_name = f"{reservation['guest_first_name']} {reservation['guest_last_name']}"
-            arrival_date = reservation['arrival_date']
-            room_number = reservation['room_id']
-            
-            card = ReservationCard(guest_name, arrival_date, room_number)
-            self.reservations_container_layout.addWidget(card)
+        if not reservations:
+            # Create a label for no reservations
+            no_reservations_label = QLabel("No Reservations")
+            no_reservations_label.setObjectName("noReservationsLabel")
+            no_reservations_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            no_reservations_label.setStyleSheet("""
+                QLabel {
+                    color: #7f8c8d;
+                    font-size: 16px;
+                    padding: 20px;
+                }
+            """)
+            self.reservations_container_layout.addWidget(no_reservations_label)
+        else:
+            # Add new reservation cards (limit to 5 most recent)
+            for reservation in reservations[:5]:
+                guest_name = f"{reservation['guest_first_name']} {reservation['guest_last_name']}"
+                arrival_date = reservation['arrival_date']
+                room_number = reservation['room_id']
+                
+                card = ReservationCard(guest_name, arrival_date, room_number)
+                self.reservations_container_layout.addWidget(card)
         
         # Add stretch at the end
         self.reservations_container_layout.addStretch()
