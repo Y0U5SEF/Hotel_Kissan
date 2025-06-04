@@ -179,7 +179,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.room_management_widget)
         self.create_nav_button("Rooms", ":/icons/available_rooms.png", 4)
         
-        # Services (moved from settings)
+        # Services
         self.services_widget = QWidget()
         self.setup_services_widget()
         self.content_stack.addWidget(self.services_widget)
@@ -215,8 +215,11 @@ class MainWindow(QMainWindow):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(icon_label)
         
-        # Add text
+        # Add text with larger font size
         text_label = QLabel(text)
+        font = text_label.font()
+        font.setPointSize(14)  # Increase font size to 11pt
+        text_label.setFont(font)
         text_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(text_label)
         

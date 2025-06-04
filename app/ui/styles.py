@@ -506,9 +506,7 @@ QPushButton#sidebarButton {{
     border: none;
     text-align: left;
     min-height: {ROOT['tab-height']};
-    padding: 8px 16px;
-    font-size: 16px;
-    font-weight: 500;
+    padding: 12px 16px;
 }}
 
 QPushButton#sidebarButton:hover {{

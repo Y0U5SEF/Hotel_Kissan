@@ -455,6 +455,7 @@ class CheckInWidget(QWidget):
         
         status_colors = {
             "Available": "#27ae60",   # Green
+            "Vacant": "#27ae60",  # Added Vacant status with green color
             "Reserved": "#8e44ad",    # Purple
             "Occupied": "#c0392b",    # Red
             "Not Available": "#95a5a6", # Gray
@@ -1666,6 +1667,7 @@ class CheckInWidget(QWidget):
     def _room_color(self, status):
         return {
             "Available": "#27ae60",
+            "Vacant": "#27ae60",  # Added Vacant status with green color
             "Reserved": "#8e44ad",
             "Occupied": "#c0392b",
             "Not Available": "#95a5a6",

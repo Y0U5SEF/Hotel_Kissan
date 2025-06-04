@@ -2,7 +2,7 @@ import os
 
 # Define directories and files to exclude by name
 EXCLUDE_DIRS = {'.venv', 'venv', '__pycache__', 'build', 'dist', 'objects', '.git', '.gitignore'}
-EXCLUDE_FILES = {'tree.py', 'README.md'}
+EXCLUDE_FILES = {'tree.py', 'README.md', '__init__.py', 'create_admin.py', 'requirements.txt'}
 
 def generate_tree(root_dir, prefix=""):
     entries = sorted(os.listdir(root_dir))

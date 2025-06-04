@@ -26,6 +26,7 @@ class RoomManagementWidget(QWidget):
         
         # Create tab widget
         self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)  # Connect tab change signal
         
         # Room Management tab
         self.room_management_tab = QWidget()
@@ -519,4 +520,10 @@ class RoomManagementWidget(QWidget):
                 self,
                 "Success",
                 f"Successfully added {num_rooms.value()} {room_type.currentText()} rooms"
-            ) 
+            )
+
+    def on_tab_changed(self, index):
+        """Handle tab change events"""
+        tab_name = self.tab_widget.tabText(index)
+        if tab_name == "Room Management":
+            self.load_rooms()  # Refresh room data when room management tab is opened 

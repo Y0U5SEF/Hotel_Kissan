@@ -12,7 +12,7 @@ from app.core.dev_config import DEV_MODE  # <-- moved here
 
 
 # Development mode flag - Set to False for production
-DEV_MODE = False
+DEV_MODE = True
 
 class HotelManagementApp:
     def __init__(self):

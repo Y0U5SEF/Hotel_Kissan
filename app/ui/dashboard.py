@@ -1,12 +1,13 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QSizePolicy, QGridLayout, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox
+    QTableWidgetItem, QHeaderView, QMessageBox, QDialog, QDialogButtonBox,
+    QCheckBox
 )
 from PyQt6.QtCore import Qt, QDateTime, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QPainter, QIcon
 from PyQt6.QtCharts import QChart, QChartView, QLineSeries, QPieSeries
-from app.core.db import get_all_rooms, get_available_rooms_count, get_reservations, get_all_checkins
+from app.core.db import get_all_rooms, get_available_rooms_count, get_reservations, get_all_checkins, update_room
 from datetime import datetime
 
 class KPIWidget(QFrame):
@@ -247,6 +248,11 @@ class DashboardWidget(QWidget):
         new_reservation_btn = QuickActionButton("New Reservation", ":/icons/reservation.png")
         new_reservation_btn.clicked.connect(self.new_reservation_clicked)
         quick_actions_layout.addWidget(new_reservation_btn)
+
+        # Add Update Room Status button
+        update_room_status_btn = QuickActionButton("Update Room Status", ":/icons/room_96px.png")
+        update_room_status_btn.clicked.connect(self.show_update_room_status_dialog)
+        quick_actions_layout.addWidget(update_room_status_btn)
         
         left_sidebar_layout.addWidget(quick_actions_frame)
         
@@ -349,6 +355,19 @@ class DashboardWidget(QWidget):
         not_available_layout.addWidget(not_available_color)
         not_available_layout.addWidget(not_available_text)
         legend_layout.addWidget(not_available_legend)
+
+        # Needs Cleaning (Yellow)
+        needs_cleaning_legend = QWidget()
+        needs_cleaning_layout = QHBoxLayout(needs_cleaning_legend)
+        needs_cleaning_layout.setContentsMargins(0, 0, 0, 0)
+        needs_cleaning_layout.setSpacing(5)
+        needs_cleaning_color = QLabel()
+        needs_cleaning_color.setFixedSize(16, 16)
+        needs_cleaning_color.setStyleSheet("background-color: #f1c40f; border: 1px solid #ccc;")
+        needs_cleaning_text = QLabel("Needs Cleaning")
+        needs_cleaning_layout.addWidget(needs_cleaning_color)
+        needs_cleaning_layout.addWidget(needs_cleaning_text)
+        legend_layout.addWidget(needs_cleaning_legend)
         
         legend_layout.addStretch()
         room_grid_layout.addLayout(legend_layout)
@@ -552,6 +571,19 @@ class DashboardWidget(QWidget):
                         background: #7f8c8d;
                     }
                 """)
+            elif status == "Needs Cleaning":
+                btn.setStyleSheet("""
+                    QPushButton {
+                        min-height:50px;
+                        background: #f1c40f;
+                        color: white;
+                        font-weight: bold;
+                        border-radius: 0px;
+                    }
+                    QPushButton:hover {
+                        background: #f39c12;
+                    }
+                """)
             else:  # Occupied or other statuses
                 btn.setStyleSheet("""
                     QPushButton {
@@ -677,3 +709,80 @@ class DashboardWidget(QWidget):
         """Update the available rooms count"""
         available_count = get_available_rooms_count()
         self.available_rooms_kpi.update_value(str(available_count))
+
+    def show_update_room_status_dialog(self):
+        """Show dialog to update room status from needs cleaning to vacant"""
+        # Get all rooms that need cleaning
+        rooms = get_all_rooms()
+        rooms_needing_cleaning = [room for room in rooms if room.get('status') == 'Needs Cleaning']
+        
+        if not rooms_needing_cleaning:
+            QMessageBox.information(self, "No Rooms Need Cleaning", 
+                                  "There are no rooms that need cleaning at the moment.")
+            return
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Update Room Status")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        
+        # Add explanation label
+        explanation = QLabel("Select rooms to mark as Vacant after cleaning:")
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        
+        # Create scroll area for room list
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumHeight(300)
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        
+        # Add checkboxes for each room
+        room_checkboxes = {}
+        for room in rooms_needing_cleaning:
+            room_widget = QWidget()
+            room_layout = QHBoxLayout(room_widget)
+            
+            checkbox = QCheckBox(f"Room {room['number']} - {room.get('type', '')}")
+            room_checkboxes[room['id']] = checkbox
+            room_layout.addWidget(checkbox)
+            
+            scroll_layout.addWidget(room_widget)
+        
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+        
+        # Add buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | 
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Update selected rooms
+            updated_count = 0
+            for room_id, checkbox in room_checkboxes.items():
+                if checkbox.isChecked():
+                    room = next((r for r in rooms if r['id'] == room_id), None)
+                    if room:
+                        updated_room = dict(room)
+                        updated_room['status'] = 'Vacant'
+                        update_room(room_id, updated_room)
+                        updated_count += 1
+            
+            # Show success message
+            if updated_count > 0:
+                QMessageBox.information(self, "Success", 
+                                      f"Successfully updated {updated_count} room(s) to Vacant status.")
+                # Refresh room grid and KPIs
+                self.load_room_grid()
+                self.update_available_rooms()
+            else:
+                QMessageBox.information(self, "No Changes", 
+                                      "No rooms were selected for status update.")
