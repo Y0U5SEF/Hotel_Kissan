@@ -110,9 +110,9 @@ class ReportsWidget(QWidget):
 
         # Check-ins Table
         self.checkins_table = QTableWidget()
-        self.checkins_table.setColumnCount(6)
+        self.checkins_table.setColumnCount(7)
         self.checkins_table.setHorizontalHeaderLabels([
-            "Check-in ID", "Guest Name", "Room", "Arrival", "Departure", "Status"
+            "Check-in ID", "Guest Name", "ID/Passport", "Room", "Arrival", "Departure", "Status"
         ])
         self.checkins_table.setAlternatingRowColors(True)
         self.checkins_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -200,10 +200,11 @@ class ReportsWidget(QWidget):
                 self.checkins_table.insertRow(row)
                 self.checkins_table.setItem(row, 0, QTableWidgetItem(record.get("checkin_id", "")))
                 self.checkins_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
-                self.checkins_table.setItem(row, 2, QTableWidgetItem(record.get("room_number", "")))
-                self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
-                self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
-                self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("status", "")))
+                self.checkins_table.setItem(row, 2, QTableWidgetItem(record.get("id_number", "")))
+                self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("room_number", "")))
+                self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("arrival_date", "")))
+                self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("departure_date", "")))
+                self.checkins_table.setItem(row, 6, QTableWidgetItem(record.get("status", "")))
 
         elif report_type == "Check-outs":
             self.status_filter.clear()

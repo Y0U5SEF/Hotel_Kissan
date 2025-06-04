@@ -752,7 +752,7 @@ def get_filtered_checkins(from_date, to_date, room_type=None, status=None):
 
     query = '''
         SELECT c.checkin_id, g.first_name || ' ' || g.last_name AS guest_name,
-               r.number as room_number, c.arrival_date, c.departure_date, c.status
+               g.id_number, r.number as room_number, c.arrival_date, c.departure_date, c.status
         FROM check_ins c
         LEFT JOIN guests g ON c.guest_id = g.id
         LEFT JOIN rooms r ON c.room_id = r.id
