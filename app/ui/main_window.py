@@ -18,6 +18,7 @@ from app.ui.check_in import CheckInWidget
 from app.ui.reservations_module import ReservationsWidget
 from app.ui.settings import SettingsWidget
 from app.ui.room_management import RoomManagementWidget
+from app.ui.company_accounts import CompanyAccountsWidget
 from app.ui.styles import MAIN_STYLESHEET
 from PyQt6.QtCore import pyqtSignal
 from app.ui.reports import ReportsWidget
@@ -179,16 +180,21 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.room_management_widget)
         self.create_nav_button("Rooms", ":/icons/available_rooms.png", 4)
         
+        # Company Accounts
+        self.company_accounts_widget = CompanyAccountsWidget()
+        self.content_stack.addWidget(self.company_accounts_widget)
+        self.create_nav_button("Company Accounts", ":/icons/company.png", 5)
+        
         # Services
         self.services_widget = QWidget()
         self.setup_services_widget()
         self.content_stack.addWidget(self.services_widget)
-        self.create_nav_button("Services", ":/icons/star.png", 5)
+        self.create_nav_button("Services", ":/icons/star.png", 6)
         
         # Reports
         reports_widget = ReportsWidget()
         self.content_stack.addWidget(reports_widget)
-        self.create_nav_button("Reports", ":/icons/reports.png", 6)
+        self.create_nav_button("Reports", ":/icons/reports.png", 7)
         
         # Add stretch to push settings button to bottom
         self.nav_layout.addStretch()
@@ -196,7 +202,7 @@ class MainWindow(QMainWindow):
         # Settings (at bottom)
         self.settings_widget = SettingsWidget()
         self.content_stack.addWidget(self.settings_widget)
-        self.create_nav_button("Settings", ":/icons/settings.png", 7)
+        self.create_nav_button("Settings", ":/icons/settings.png", 8)
         
     def create_nav_button(self, text, icon_path, index):
         button = QPushButton()

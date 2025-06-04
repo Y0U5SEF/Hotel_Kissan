@@ -30,19 +30,53 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
-            id_type TEXT,
-            id_number TEXT,
-            dob TEXT,
+            id_number TEXT UNIQUE,
             nationality TEXT,
-            phone_code TEXT,
-            phone_number TEXT,
+            phone TEXT,
             email TEXT,
-            company TEXT,
-            address TEXT,
-            vip_status TEXT,
-            preferences TEXT
+            company_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES company_accounts(id)
         )
     ''')
+    
+    # Create company_accounts table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS company_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            address TEXT,
+            phone TEXT,
+            email TEXT,
+            tax_id TEXT,
+            billing_terms TEXT,
+            credit_limit DECIMAL(10,2),
+            payment_due_days INTEGER,
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create company_charges table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS company_charges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            checkin_id TEXT NOT NULL,
+            guest_id INTEGER NOT NULL,
+            charge_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            room_charges DECIMAL(10,2) DEFAULT 0,
+            service_charges DECIMAL(10,2) DEFAULT 0,
+            total_amount DECIMAL(10,2) NOT NULL,
+            is_paid BOOLEAN DEFAULT 0,
+            payment_date TIMESTAMP,
+            notes TEXT,
+            FOREIGN KEY (company_id) REFERENCES company_accounts(id),
+            FOREIGN KEY (checkin_id) REFERENCES check_ins(checkin_id),
+            FOREIGN KEY (guest_id) REFERENCES guests(id)
+        )
+    ''')
+    
     c.execute('''
         CREATE TABLE IF NOT EXISTS rooms (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,27 +208,29 @@ def init_db():
 def insert_guest(guest):
     conn = get_connection()
     c = conn.cursor()
-    c.execute('''
-        INSERT INTO guests (
-            first_name, last_name, id_type, id_number, dob, nationality, phone_code, phone_number, email, company, address, vip_status, preferences
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        guest['first_name'],
-        guest['last_name'],
-        guest.get('id_type'),
-        guest.get('id_number'),
-        guest.get('dob'),
-        guest.get('nationality'),
-        guest.get('phone_code'),
-        guest.get('phone_number'),
-        guest.get('email'),
-        guest.get('company'),
-        guest.get('address'),
-        guest.get('vip_status'),
-        guest.get('preferences')
-    ))
-    conn.commit()
-    conn.close()
+    try:
+        c.execute('''
+            INSERT INTO guests (
+                first_name, last_name, id_number, nationality,
+                phone, email, company_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            guest['first_name'],
+            guest['last_name'],
+            guest.get('id_number'),
+            guest.get('nationality'),
+            guest.get('phone'),
+            guest.get('email'),
+            guest.get('company_id')
+        ))
+        conn.commit()
+        return c.lastrowid
+    except sqlite3.IntegrityError as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise ValueError("A guest with this ID number already exists")
+        raise
+    finally:
+        conn.close()
 
 def update_guest(guest_id, guest):
     """Update an existing guest record"""
@@ -204,32 +240,20 @@ def update_guest(guest_id, guest):
         UPDATE guests SET
             first_name = ?,
             last_name = ?,
-            id_type = ?,
             id_number = ?,
-            dob = ?,
             nationality = ?,
-            phone_code = ?,
-            phone_number = ?,
+            phone = ?,
             email = ?,
-            company = ?,
-            address = ?,
-            vip_status = ?,
-            preferences = ?
+            company_id = ?
         WHERE id = ?
     ''', (
         guest['first_name'],
         guest['last_name'],
-        guest.get('id_type'),
         guest.get('id_number'),
-        guest.get('dob'),
         guest.get('nationality'),
-        guest.get('phone_code'),
-        guest.get('phone_number'),
+        guest.get('phone'),
         guest.get('email'),
-        guest.get('company'),
-        guest.get('address'),
-        guest.get('vip_status'),
-        guest.get('preferences'),
+        guest.get('company_id'),
         guest_id
     ))
     conn.commit()
@@ -870,3 +894,160 @@ def get_all_users():
     users = [dict(zip(columns, row)) for row in c.fetchall()]
     conn.close()
     return users
+
+# Company Accounts CRUD
+def add_company_account(company):
+    """Add a new company account to database"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO company_accounts (
+            name, address, phone, email, tax_id, billing_terms,
+            credit_limit, payment_due_days, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        company['name'],
+        company.get('address'),
+        company.get('phone'),
+        company.get('email'),
+        company.get('tax_id'),
+        company.get('billing_terms'),
+        company.get('credit_limit', 0),
+        company.get('payment_due_days', 30),
+        company.get('status', 'active')
+    ))
+    conn.commit()
+    conn.close()
+
+def get_company_accounts():
+    """Get all company accounts from database"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM company_accounts ORDER BY name')
+    columns = [desc[0] for desc in c.description]
+    companies = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return companies
+
+def get_company_account(company_id):
+    """Get a specific company account by ID"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM company_accounts WHERE id = ?', (company_id,))
+    columns = [desc[0] for desc in c.description]
+    company = c.fetchone()
+    conn.close()
+    return dict(zip(columns, company)) if company else None
+
+def update_company_account(company):
+    """Update an existing company account"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        UPDATE company_accounts SET
+            name = ?,
+            address = ?,
+            phone = ?,
+            email = ?,
+            tax_id = ?,
+            billing_terms = ?,
+            credit_limit = ?,
+            payment_due_days = ?,
+            status = ?
+        WHERE id = ?
+    ''', (
+        company['name'],
+        company.get('address'),
+        company.get('phone'),
+        company.get('email'),
+        company.get('tax_id'),
+        company.get('billing_terms'),
+        company.get('credit_limit', 0),
+        company.get('payment_due_days', 30),
+        company.get('status', 'active'),
+        company['id']
+    ))
+    conn.commit()
+    conn.close()
+
+# Company Charges CRUD
+def add_company_charge(charge):
+    """Add a new company charge"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO company_charges (
+            company_id, checkin_id, guest_id, room_charges,
+            service_charges, total_amount, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        charge['company_id'],
+        charge['checkin_id'],
+        charge['guest_id'],
+        charge.get('room_charges', 0),
+        charge.get('service_charges', 0),
+        charge['total_amount'],
+        charge.get('notes')
+    ))
+    conn.commit()
+    conn.close()
+
+def get_company_charges(company_id=None, is_paid=None):
+    """Get company charges, optionally filtered by company and payment status"""
+    conn = get_connection()
+    c = conn.cursor()
+    
+    query = '''
+        SELECT cc.*, g.first_name, g.last_name, ci.checkin_id, ci.arrival_date, ci.departure_date
+        FROM company_charges cc
+        JOIN guests g ON cc.guest_id = g.id
+        JOIN check_ins ci ON cc.checkin_id = ci.id
+    '''
+    params = []
+    
+    if company_id is not None:
+        query += ' WHERE cc.company_id = ?'
+        params.append(company_id)
+        if is_paid is not None:
+            query += ' AND cc.is_paid = ?'
+            params.append(is_paid)
+    elif is_paid is not None:
+        query += ' WHERE cc.is_paid = ?'
+        params.append(is_paid)
+    
+    query += ' ORDER BY cc.charge_date DESC'
+    
+    c.execute(query, params)
+    columns = [desc[0] for desc in c.description]
+    charges = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return charges
+
+def mark_company_charge_paid(charge_id, payment_date=None):
+    """Mark a company charge as paid"""
+    conn = get_connection()
+    c = conn.cursor()
+    if payment_date is None:
+        payment_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    c.execute('''
+        UPDATE company_charges SET
+            is_paid = 1,
+            payment_date = ?
+        WHERE id = ?
+    ''', (payment_date, charge_id))
+    conn.commit()
+    conn.close()
+
+def get_company_balance(company_id):
+    """Get total unpaid balance for a company"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT SUM(total_amount) as balance
+        FROM company_charges
+        WHERE company_id = ? AND is_paid = 0
+    ''', (company_id,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result and result[0] is not None else 0

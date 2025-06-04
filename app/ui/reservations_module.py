@@ -432,7 +432,7 @@ class ReservationsWidget(QWidget):
         legend_layout = QHBoxLayout(legend_frame)
         
         status_colors = {
-            "Available": "#27ae60",   # Green
+            "Vacant": "#27ae60",   # Green
             "Reserved": "#8e44ad",    # Purple
             "Occupied": "#c0392b",    # Red
             "Not Available": "#95a5a6", # Gray
@@ -785,7 +785,7 @@ class ReservationsWidget(QWidget):
     def _get_status_color(self, status):
         """Get the color for a reservation status"""
         return {
-            "Available": "#27ae60",
+            "Vacant": "#27ae60",      # Green
             "Reserved": "#8e44ad",
             "Occupied": "#c0392b",
             "Not Available": "#95a5a6",
@@ -947,7 +947,7 @@ class ReservationsWidget(QWidget):
         legend_frame.setObjectName("legendFrame")
         legend_layout = QHBoxLayout(legend_frame)
         status_colors = {
-            "Available": "#27ae60",   # Green
+            "Vacant": "#27ae60",   # Green
             "Reserved": "#8e44ad",    # Purple
             "Occupied": "#c0392b",    # Red
             "Not Available": "#95a5a6", # Gray
@@ -1344,7 +1344,7 @@ class ReservationsWidget(QWidget):
 
     def _room_color(self, status):
         return {
-            "Available": "#27ae60",
+            "Vacant": "#27ae60",      # Green
             "Reserved": "#8e44ad",
             "Occupied": "#c0392b",
             "Not Available": "#95a5a6",

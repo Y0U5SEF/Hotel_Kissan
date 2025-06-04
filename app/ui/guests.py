@@ -50,64 +50,84 @@ class GuestProfileDialog(QDialog):
         
         # ID Number
         self.id_number = QLineEdit()
-        self.id_number.setObjectName("uppercase")
         self.id_number.setPlaceholderText("Enter ID number")
         form_layout.addRow("ID Number:", self.id_number)
         
         # Date of Birth
         self.dob = QDateEdit()
         self.dob.setCalendarPopup(True)
-        self.dob.setDate(QDate.currentDate())
+        self.dob.setDate(QDate.currentDate().addYears(-18))
         form_layout.addRow("Date of Birth:", self.dob)
         
         # Nationality
         self.nationality = QComboBox()
-        self.nationality.addItems(["Local", "International"])
+        self.nationality.setEditable(True)
+        self.nationality.addItems([
+            "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina",
+            "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados",
+            "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina",
+            "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde",
+            "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China",
+            "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic",
+            "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador",
+            "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland",
+            "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala",
+            "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India",
+            "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan",
+            "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Korea, South", "Kosovo", "Kuwait",
+            "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein",
+            "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta",
+            "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco",
+            "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal",
+            "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway",
+            "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru",
+            "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis",
+            "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe",
+            "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia",
+            "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka",
+            "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania",
+            "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey",
+            "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom",
+            "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
+            "Yemen", "Zambia", "Zimbabwe"
+        ])
         form_layout.addRow("Nationality:", self.nationality)
         
-        basic_info_layout.addLayout(form_layout)
-        layout.addWidget(basic_info_frame)
-        
-        # --- Contact Information Section ---
-        contact_frame = QFrame()
-        contact_layout = QVBoxLayout(contact_frame)
-        contact_label = QLabel("Contact Information")
-        contact_label.setStyleSheet("font-weight: bold; margin-bottom: 8px;")
-        contact_layout.addWidget(contact_label)
-        
-        contact_form = QFormLayout()
-        
-        # Phone Code
+        # Phone
+        phone_layout = QHBoxLayout()
         self.phone_code = QLineEdit()
-        self.phone_code.setPlaceholderText("+XX")
-        contact_form.addRow("Phone Code:", self.phone_code)
-        
-        # Phone Number
+        self.phone_code.setPlaceholderText("Code")
+        self.phone_code.setFixedWidth(60)
         self.phone_number = QLineEdit()
-        self.phone_number.setPlaceholderText("Enter phone number")
-        contact_form.addRow("Phone Number:", self.phone_number)
+        self.phone_number.setPlaceholderText("Phone number")
+        phone_layout.addWidget(self.phone_code)
+        phone_layout.addWidget(self.phone_number)
+        form_layout.addRow("Phone:", phone_layout)
         
         # Email
         self.email = QLineEdit()
         self.email.setPlaceholderText("Enter email address")
-        contact_form.addRow("Email:", self.email)
+        form_layout.addRow("Email:", self.email)
         
-        contact_layout.addLayout(contact_form)
-        layout.addWidget(contact_frame)
+        # Company
+        self.company = QComboBox()
+        self.company.setEditable(True)
+        self.company.setPlaceholderText("Select or enter company name")
+        self.populate_companies()
+        form_layout.addRow("Company:", self.company)
+        
+        basic_info_layout.addLayout(form_layout)
+        layout.addWidget(basic_info_frame)
         
         # --- Additional Information Section ---
         additional_frame = QFrame()
         additional_layout = QVBoxLayout(additional_frame)
+        
         additional_label = QLabel("Additional Information")
         additional_label.setStyleSheet("font-weight: bold; margin-bottom: 8px;")
         additional_layout.addWidget(additional_label)
         
         add_form = QFormLayout()
-        
-        # Company
-        self.company = QLineEdit()
-        self.company.setPlaceholderText("Enter company name")
-        add_form.addRow("Company:", self.company)
         
         # Address
         self.address = QLineEdit()
@@ -146,6 +166,15 @@ class GuestProfileDialog(QDialog):
         if self.guest_data:
             self.load_guest_data()
     
+    def populate_companies(self):
+        """Populate company dropdown with existing companies"""
+        from app.core.db import get_company_accounts
+        companies = get_company_accounts()
+        self.company.clear()
+        self.company.addItem("-- Select Company --", None)
+        for company in companies:
+            self.company.addItem(company['name'], company['id'])
+    
     def load_guest_data(self):
         """Load existing guest data into the form"""
         self.first_name.setText(self.guest_data.get('first_name', ''))
@@ -175,7 +204,15 @@ class GuestProfileDialog(QDialog):
         self.phone_code.setText(self.guest_data.get('phone_code', ''))
         self.phone_number.setText(self.guest_data.get('phone_number', ''))
         self.email.setText(self.guest_data.get('email', ''))
-        self.company.setText(self.guest_data.get('company', ''))
+        
+        # Set company
+        company_id = self.guest_data.get('company_id')
+        if company_id:
+            for i in range(self.company.count()):
+                if self.company.itemData(i) == company_id:
+                    self.company.setCurrentIndex(i)
+                    break
+        
         self.address.setText(self.guest_data.get('address', ''))
         
         # Set VIP status
@@ -363,7 +400,7 @@ class GuestsWidget(QWidget):
                 'phone_code': dialog.phone_code.text() if hasattr(dialog, 'phone_code') else None,
                 'phone_number': dialog.phone_number.text() if hasattr(dialog, 'phone_number') else None,
                 'email': dialog.email.text() if hasattr(dialog, 'email') else None,
-                'company': dialog.company.text() if hasattr(dialog, 'company') else None,
+                'company_id': dialog.company.itemData(dialog.company.currentIndex()) if hasattr(dialog, 'company') else None,
                 'address': dialog.address.text() if hasattr(dialog, 'address') else None,
                 'vip_status': dialog.vip_status.currentText() if hasattr(dialog, 'vip_status') else None,
                 'preferences': dialog.preferences.text() if hasattr(dialog, 'preferences') else None,
@@ -385,7 +422,7 @@ class GuestsWidget(QWidget):
                 'phone_code': dialog.phone_code.text() if hasattr(dialog, 'phone_code') else None,
                 'phone_number': dialog.phone_number.text() if hasattr(dialog, 'phone_number') else None,
                 'email': dialog.email.text() if hasattr(dialog, 'email') else None,
-                'company': dialog.company.text() if hasattr(dialog, 'company') else None,
+                'company_id': dialog.company.itemData(dialog.company.currentIndex()) if hasattr(dialog, 'company') else None,
                 'address': dialog.address.text() if hasattr(dialog, 'address') else None,
                 'vip_status': dialog.vip_status.currentText() if hasattr(dialog, 'vip_status') else None,
                 'preferences': dialog.preferences.text() if hasattr(dialog, 'preferences') else None,

@@ -1,10 +1,17 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
-    QHeaderView, QLineEdit, QComboBox, QDateEdit, QCalendarWidget, QFormLayout, QStackedWidget, QCompleter, QGridLayout, QMessageBox, QFrame, QSpinBox, QTextEdit, QProgressBar, QDialog, QDialogButtonBox, QSizePolicy, QCheckBox
+    QHeaderView, QLineEdit, QComboBox, QDateEdit, QCalendarWidget, QFormLayout, QStackedWidget, QCompleter, 
+    QGridLayout, QMessageBox, QFrame, QSpinBox, QTextEdit, QProgressBar, QDialog, QDialogButtonBox, 
+    QSizePolicy, QCheckBox, QScrollArea, QSpacerItem
 )
-from PyQt6.QtCore import Qt, QDate, QSize, pyqtSignal, QMutex
-from PyQt6.QtGui import QIcon, QPixmap
-from app.core.db import get_all_guests, get_all_rooms, update_room, get_guest_id_by_name, insert_checkin, get_all_checkins, update_checkin, get_booking_services, get_total_booking_charges, get_room_rates, get_tax_rates # Import get_tax_rates
+from PyQt6.QtCore import Qt, QDate, QSize, pyqtSignal, QMutex, QStringListModel
+from PyQt6.QtGui import QIcon, QPixmap, QFont, QColor, QPainter
+from app.core.db import (
+    get_all_guests, get_all_rooms, update_room, get_guest_id_by_name,
+    insert_checkin, get_all_checkins, update_checkin, get_booking_services,
+    get_total_booking_charges, get_room_rates, get_tax_rates,
+    get_company_account, add_company_charge
+)
 from app.ui.dialogs.add_extra_charge import AddExtraChargeDialog
 import uuid
 from datetime import datetime
@@ -20,7 +27,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants
-# TAX_RATE = Decimal('0.10') # This constant is no longer directly used for calculation
 ROOM_GRID_COLS = 5
 MIN_NIGHTS = 1
 MAX_NIGHTS = 60
@@ -241,14 +247,18 @@ class CheckInWidget(QWidget):
         layout.addWidget(self.checkin_table)
 
     def populate_guest_combo(self):
-        self.guest_select_combo.clear()
-        guests = get_all_guests()
-        self.guest_select_combo.addItem("--Select guest--", None)
-        for g in guests:
-            name = f"{g['first_name']} {g['last_name']}"
-            self.guest_select_combo.addItem(name, g)
+        """Populate guest selection combo box"""
+        try:
+            guests = get_all_guests()
+            self.guest_select_combo.addItem("--Select guest--", None)
+            for g in guests:
+                name = f"{g['first_name']} {g['last_name']}"
+                self.guest_select_combo.addItem(name, g)
+        except Exception as e:
+            logger.error(f"Error populating guest combo: {str(e)}")
 
     def setup_new_checkin_tab(self):
+        """Setup the new check-in tab"""
         layout = QVBoxLayout(self.new_checkin_tab)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(0)
@@ -305,15 +315,15 @@ class CheckInWidget(QWidget):
         search_container = QWidget()
         search_container_layout = QHBoxLayout(search_container)
         search_container_layout.setContentsMargins(0, 0, 0, 0)
-        search_container_layout.setSpacing(10)  # Add some spacing between the widgets
+        search_container_layout.setSpacing(10)
         
         # Guest select combo
         self.guest_select_combo = QComboBox()
-        self.guest_select_combo.setEditable(True)  # Make combo box editable
-        self.guest_select_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)  # Prevent adding new items
+        self.guest_select_combo.setEditable(True)
+        self.guest_select_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.guest_select_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.guest_select_combo.currentIndexChanged.connect(self.on_guest_selected)
-        self.guest_select_combo.setPlaceholderText("Search and select guest...")  # Add placeholder text
+        self.guest_select_combo.setPlaceholderText("Search and select guest...")
         search_container_layout.addWidget(self.guest_select_combo)
         
         # Create completer for guest search
@@ -329,6 +339,7 @@ class CheckInWidget(QWidget):
         self.guest_last_name_label = QLabel()
         self.guest_id_number_label = QLabel()
         self.guest_nationality_label = QLabel()
+        self.guest_company_label = QLabel()
 
         # Create horizontal layouts for each label pair
         first_name_layout = QHBoxLayout()
@@ -351,11 +362,17 @@ class CheckInWidget(QWidget):
         nationality_layout.addWidget(self.guest_nationality_label)
         nationality_layout.addStretch()
 
+        company_layout = QHBoxLayout()
+        company_layout.addWidget(QLabel("Company:"))
+        company_layout.addWidget(self.guest_company_label)
+        company_layout.addStretch()
+
         # Add the horizontal layouts to the main layout
         s1_layout.addLayout(first_name_layout)
         s1_layout.addLayout(last_name_layout)
         s1_layout.addLayout(id_number_layout)
         s1_layout.addLayout(nationality_layout)
+        s1_layout.addLayout(company_layout)
         
         self.wizard.addWidget(step1)
 
@@ -383,7 +400,6 @@ class CheckInWidget(QWidget):
         # Removed minimum date restriction to allow past dates
         self.arrival_date.setMinimumWidth(350)
         self.arrival_date.setMinimumHeight(250)
-        self.arrival_date.clicked.connect(self.update_payment_amount)
         arrival_layout.addWidget(self.arrival_date)
         
         # Departure date
@@ -398,7 +414,6 @@ class CheckInWidget(QWidget):
         self.departure_date.setMinimumDate(QDate.currentDate().addDays(1))
         self.departure_date.setMinimumWidth(350)
         self.departure_date.setMinimumHeight(250)
-        self.departure_date.clicked.connect(self.update_payment_amount)
         departure_layout.addWidget(self.departure_date)
         
         date_layout.addWidget(arrival_widget, 1)
@@ -406,7 +421,7 @@ class CheckInWidget(QWidget):
         s2_layout.addWidget(date_frame)
         
         # Add a stretch here to push content to the top
-        s2_layout.addStretch() # <--- ADD THIS LINE HERE
+        s2_layout.addStretch()
 
         # Number of guests with stepper
         guests_frame = QFrame()
@@ -432,153 +447,123 @@ class CheckInWidget(QWidget):
         # Step 3: Room Selection
         step3 = QWidget()
         s3_layout = QVBoxLayout(step3)
-        s3_layout.setContentsMargins(40, 20, 40, 20)
+        s3_layout.setContentsMargins(0, 0, 0, 0)
+        s3_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
-        # Room grid with improved styling
-        rooms_frame = QFrame()
-        rooms_frame.setObjectName("roomsFrame")
-        rooms_layout = QVBoxLayout(rooms_frame)
+        # Room type selection at the top
+        room_type_frame = QFrame()
+        room_type_frame.setObjectName("roomTypeFrame")
+        room_type_layout = QHBoxLayout(room_type_frame)
         
-        rooms_label = QLabel("Select Room")
-        rooms_label.setObjectName("sectionTitle")
-        rooms_layout.addWidget(rooms_label)
+        room_type_label = QLabel("Room Type")
+        room_type_label.setObjectName("sectionTitle")
+        room_type_layout.addWidget(room_type_label)
         
-        self.room_grid_widget = QWidget()
-        self.room_grid_layout = QGridLayout(self.room_grid_widget)
-        self.room_grid_layout.setSpacing(10)
-        rooms_layout.addWidget(self.room_grid_widget)
+        self.room_type = QComboBox()
+        self.room_type.setMinimumWidth(200)
+        room_type_layout.addWidget(self.room_type)
+        room_type_layout.addStretch()
         
-        # Legend with improved styling
-        legend_frame = QFrame()
-        legend_frame.setObjectName("legendFrame")
-        legend_layout = QHBoxLayout(legend_frame)
+        s3_layout.addWidget(room_type_frame)
         
-        status_colors = {
-            "Available": "#27ae60",   # Green
-            "Vacant": "#27ae60",  # Added Vacant status with green color
-            "Reserved": "#8e44ad",    # Purple
-            "Occupied": "#c0392b",    # Red
-            "Not Available": "#95a5a6", # Gray
-            "Needs Cleaning": "#f1c40f" # Yellow
-        }
+        # Room grid
+        room_grid_container = QFrame()
+        room_grid_container.setObjectName("roomGridContainer")
+        room_grid_container.setStyleSheet("background-color: lightyellow;")
+        room_grid_layout = QVBoxLayout(room_grid_container)
+        room_grid_layout.setContentsMargins(0, 0, 0, 0)
+        room_grid_layout.setSpacing(10)
+        room_grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align to top
         
-        for status, color in status_colors.items():
-            legend_item = QWidget()
-            legend_item_layout = QHBoxLayout(legend_item)
-            legend_item_layout.setSpacing(5)
-            color_box = QLabel()
-            color_box.setFixedSize(20, 20)
-            color_box.setStyleSheet(f"background-color: {color}; border-radius: 4px;")
-            status_label = QLabel(status)
-            status_label.setStyleSheet("color: #2c3e50;")
-            legend_item_layout.addWidget(color_box)
-            legend_item_layout.addWidget(status_label)
-            legend_layout.addWidget(legend_item)
+        self.room_grid = QGridLayout()
+        self.room_grid.setSpacing(10)
+        room_grid_layout.addLayout(self.room_grid)
         
-        rooms_layout.addWidget(legend_frame)
-        s3_layout.addWidget(rooms_frame)
+        s3_layout.addWidget(room_grid_container)
+        
         self.wizard.addWidget(step3)
 
-        # Step 4: Payment (Final step)
+        # Step 4: Payment
         step4 = QWidget()
         s4_layout = QVBoxLayout(step4)
         s4_layout.setContentsMargins(40, 20, 40, 20)
         
+        # Payment form
         payment_frame = QFrame()
         payment_frame.setObjectName("paymentFrame")
-        payment_layout = QVBoxLayout(payment_frame)
+        payment_layout = QFormLayout(payment_frame)
         
-        payment_label = QLabel("Payment Details")
-        payment_label.setObjectName("sectionTitle")
-        payment_layout.addWidget(payment_label)
-        
-        # Payment method with modern dropdown
-        method_widget = QWidget()
-        method_layout = QHBoxLayout(method_widget)
-        method_label = QLabel("Payment Method:")
-        self.payment_method = QComboBox()
-        self.payment_method.addItems(["Cash", "Credit Card", "Debit Card", "Mobile Payment"])
-        method_layout.addWidget(method_label)
-        method_layout.addWidget(self.payment_method)
-        payment_layout.addWidget(method_widget)
-        
-        # Amount details
-        amounts_widget = QWidget()
-        amounts_layout = QFormLayout(amounts_widget)
-        amounts_layout.setSpacing(15)
-        
+        # Payment amount
         self.payment_amount = QLineEdit()
         self.payment_amount.setReadOnly(True)
-        self.payment_amount.setText("0.00")
-        self.payment_amount.setObjectName("readOnlyInput")
+        payment_layout.addRow("Total Amount:", self.payment_amount)
         
+        # Amount paid
         self.total_paid = QLineEdit()
         self.total_paid.setPlaceholderText("Enter amount paid")
         self.total_paid.textChanged.connect(self.update_amount_due)
+        payment_layout.addRow("Amount Paid:", self.total_paid)
         
+        # Amount due
         self.amount_due = QLineEdit()
         self.amount_due.setReadOnly(True)
-        self.amount_due.setText("0.00")
-        self.amount_due.setObjectName("readOnlyInput")
+        payment_layout.addRow("Amount Due:", self.amount_due)
         
-        amounts_layout.addRow("Amount Due:", self.payment_amount)
-        amounts_layout.addRow("Total Paid:", self.total_paid)
-        amounts_layout.addRow("Amount Remaining:", self.amount_due)
+        # Payment method
+        self.payment_method = QComboBox()
+        self.payment_method.addItems(["Cash", "Credit Card", "Debit Card", "Bank Transfer"])
+        payment_layout.addRow("Payment Method:", self.payment_method)
         
-        payment_layout.addWidget(amounts_widget)
-        
-        # Payment status with progress indicator
-        status_widget = QWidget()
-        status_layout = QVBoxLayout(status_widget)
-        
-        self.payment_status_label = QLabel("Pending")
-        self.payment_status_label.setObjectName("paymentStatus")
-        status_layout.addWidget(self.payment_status_label)
-        
-        self.payment_progress = QProgressBar()
-        self.payment_progress.setObjectName("paymentProgress")
-        self.payment_progress.setRange(0, 100)
-        self.payment_progress.setValue(0)
-        status_layout.addWidget(self.payment_progress)
-        
-        payment_layout.addWidget(status_widget)
+        # Bill to company checkbox
+        self.bill_to_company = QCheckBox("Bill to Company")
+        self.bill_to_company.setEnabled(False)  # Initially disabled
+        payment_layout.addRow("", self.bill_to_company)
         
         s4_layout.addWidget(payment_frame)
         self.wizard.addWidget(step4)
 
-        # Navigation buttons
+        # Connect signals after all UI elements are created
+        self.arrival_date.selectionChanged.connect(self.update_payment_amount)
+        self.departure_date.selectionChanged.connect(self.update_payment_amount)
+        self.room_type.currentTextChanged.connect(self.update_payment_amount)
+        self.total_paid.textChanged.connect(self.update_payment_status)
+
+        # Navigation buttons for the wizard (add at the end of setup_new_checkin_tab)
         nav_frame = QFrame()
+        nav_frame.setContentsMargins(0, 0, 0, 0)
         nav_frame.setObjectName("navFrame")
         nav_layout = QHBoxLayout(nav_frame)
-        
+
         self.back_btn = QPushButton("Back")
         self.next_btn = QPushButton("Next")
-        self.cancel_btn = QPushButton("Cancel")
         self.finish_btn = QPushButton("Finish")
-        
+
+        # Set object names for styling
         self.back_btn.setObjectName("navButton")
         self.next_btn.setObjectName("navButton")
-        self.cancel_btn.setObjectName("navButton")
         self.finish_btn.setObjectName("navButton")
-        
-        nav_layout.addWidget(self.cancel_btn)
-        nav_layout.addStretch()
+
+        # Set fixed widths for consistent button sizes
+        button_width = 100
+        self.back_btn.setFixedWidth(button_width)
+        self.next_btn.setFixedWidth(button_width)
+        self.finish_btn.setFixedWidth(button_width)
+
         nav_layout.addWidget(self.back_btn)
+        nav_layout.addStretch()
         nav_layout.addWidget(self.next_btn)
         nav_layout.addWidget(self.finish_btn)
-        
+
         layout.addWidget(nav_frame)
 
         # Connect signals
         self.back_btn.clicked.connect(self.prev_step)
         self.next_btn.clicked.connect(self.next_step)
-        self.cancel_btn.clicked.connect(self.cancel_wizard)
         self.finish_btn.clicked.connect(self.finish_wizard)
-        self.total_paid.textChanged.connect(self.update_amount_due)
-        self.total_paid.textChanged.connect(self.update_payment_status)
-        self.payment_amount.textChanged.connect(self.update_payment_status)
-        
-        self.update_wizard_ui()
+
+        # Connect date changes to update total
+        self.arrival_date.selectionChanged.connect(self.update_payment_amount)
+        self.departure_date.selectionChanged.connect(self.update_payment_amount)
 
     def setup_checkout_tab(self):
         layout = QVBoxLayout(self.checkout_tab)
@@ -1103,9 +1088,13 @@ class CheckInWidget(QWidget):
             room_info = next((r for r in rooms if r['id'] == self.current_checkout['room_id']), None)
             if room_info:
                 room_info = dict(room_info)
-                room_info['status'] = 'Needs Cleaning'
+                room_info['status'] = 'Needs Cleaning'  # Mark as needs cleaning after checkout
                 update_room(self.current_checkout['room_id'], room_info)
-                self.room_status_changed.emit() # Emit signal for room status change
+                self.room_status_changed.emit()  # Emit signal for room status change
+            else:
+                logger.error(f"Room not found for ID: {self.current_checkout['room_id']}")
+                QMessageBox.warning(self, "Warning", "Room status could not be updated.")
+                return
             
             # Update check-in status
             self.current_checkout['status'] = 'checked_out'
@@ -1130,9 +1119,8 @@ class CheckInWidget(QWidget):
             self.load_checked_in_guests()
             
         except Exception as e:
-            logger.error(f"Error completing checkout: {str(e)}")
-            logger.error(traceback.format_exc())
-            QMessageBox.critical(self, "Error", f"Failed to complete checkout: {str(e)}")
+            logger.error(f"Error during checkout: {str(e)}")
+            QMessageBox.critical(self, "Error", f"An error occurred during checkout: {str(e)}")
 
     def show_checkout_confirmation(self):
         """Show checkout confirmation details"""
@@ -1423,16 +1411,6 @@ class CheckInWidget(QWidget):
                 QMessageBox.warning(self, "Error", "Please select a payment method")
                 return
 
-            # Validate payment amount
-            try:
-                total_amount = Decimal(self.payment_amount.text().replace('MAD ', '').strip() or '0')
-                if total_amount <= 0:
-                    QMessageBox.warning(self, "Error", "Invalid payment amount")
-                    return
-            except Exception:
-                QMessageBox.warning(self, "Error", "Invalid payment amount")
-                return
-
             # Get guest data
             guest_data = self.guest_select_combo.currentData()
             guest_id = get_guest_id_by_name(
@@ -1442,35 +1420,53 @@ class CheckInWidget(QWidget):
             if not guest_id and guest_data:
                 guest_id = guest_data.get('id')
 
-            # Create check-in record
+            # Calculate total amount
+            total_amount = Decimal(self.payment_amount.text().replace('MAD ', '').strip() or '0')
+            
+            # Update room status to occupied
+            rooms = get_all_rooms()
+            room_info = next((r for r in rooms if r['id'] == self.selected_room_id), None)
+            if room_info:
+                room_info = dict(room_info)
+                room_info['status'] = 'Occupied'
+                update_room(self.selected_room_id, room_info)
+                self.room_status_changed.emit()  # Emit signal for room status change
+            else:
+                logger.error(f"Room not found for ID: {self.selected_room_id}")
+                QMessageBox.warning(self, "Warning", "Room status could not be updated.")
+                return
+            
+            # Prepare check-in data
             checkin_data = {
                 'checkin_id': self.checkin_id,
                 'transaction_id': self.transaction_id,
                 'guest_id': guest_id,
                 'room_id': self.selected_room_id,
+                'checkin_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'arrival_date': self.arrival_date.selectedDate().toString('yyyy-MM-dd'),
                 'departure_date': self.departure_date.selectedDate().toString('yyyy-MM-dd'),
-                'num_guests': self.num_guests.value(),
+                'num_guests': int(self.num_guests.text()),
+                'total_paid': float(self.total_paid.text().replace('MAD ', '').strip() or '0'),
+                'amount_due': float(self.amount_due.text().replace('MAD ', '').strip() or '0'),
                 'payment_method': self.payment_method.currentText(),
-                'total_paid': float(self.total_paid.text().replace('MAD ', '') or 0),
-                'amount_due': float(self.amount_due.text().replace('MAD ', '') or 0),
-                'status': 'checked_in',
-                'checkin_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'status': self.payment_status_label.text()
             }
 
-            # Save check-in to database
-            self.safe_db_operation(insert_checkin, checkin_data)
-            
-            # --- Update Room Status to 'Occupied' ---
-            rooms = get_all_rooms()
-            room_to_update = next((r for r in rooms if r['id'] == self.selected_room_id), None)
-            if room_to_update:
-                updated_room_info = dict(room_to_update) # Create a mutable copy
-                updated_room_info['status'] = 'Occupied'
-                self.safe_db_operation(update_room, self.selected_room_id, updated_room_info)
-                self.room_status_changed.emit() # Emit signal for room status change
-            else:
-                logger.warning(f"Room with ID {self.selected_room_id} not found for status update.")
+            # Insert check-in record
+            insert_checkin(checkin_data)
+
+            # If guest has company and company billing is selected, create company charge
+            if guest_data and guest_data.get('company_id') and self.bill_to_company.isChecked():
+                company_charge = {
+                    'company_id': guest_data['company_id'],
+                    'checkin_id': checkin_data['checkin_id'],
+                    'guest_id': guest_id,
+                    'room_charges': float(self.room_charges.text().replace('MAD ', '').strip() or '0'),
+                    'service_charges': float(self.service_charges.text().replace('MAD ', '').strip() or '0'),
+                    'total_amount': float(total_amount),
+                    'notes': f"Check-in {self.checkin_id} - {self.guest_first_name_label.text()} {self.guest_last_name_label.text()}"
+                }
+                add_company_charge(company_charge)
 
             # Show success message with details
             success_msg = f"""
@@ -1623,152 +1619,29 @@ class CheckInWidget(QWidget):
                 self.guest_last_name_label.setText(guest.get('last_name', ''))
                 self.guest_id_number_label.setText(guest.get('id_number', ''))
                 self.guest_nationality_label.setText(guest.get('nationality', ''))
+                
+                # Get company name if guest has company_id
+                company_id = guest.get('company_id')
+                if company_id:
+                    company = get_company_account(company_id)
+                    self.guest_company_label.setText(company['name'] if company else '')
+                    # Enable bill to company checkbox if guest has a company
+                    self.bill_to_company.setEnabled(True)
+                else:
+                    self.guest_company_label.setText('')
+                    self.bill_to_company.setEnabled(False)
+                    self.bill_to_company.setChecked(False)
             else:
                 self.guest_first_name_label.setText("")
                 self.guest_last_name_label.setText("")
                 self.guest_id_number_label.setText("")
                 self.guest_nationality_label.setText("")
+                self.guest_company_label.setText("")
+                self.bill_to_company.setEnabled(False)
+                self.bill_to_company.setChecked(False)
         
         # Update the wizard UI to reflect the change in guest selection
         self.update_wizard_ui()
-
-    def reload_guests_for_search(self):
-        """Reload guests data and update dropdown"""
-        self.guests_data = get_all_guests()
-        self.filter_guest_dropdown()  # This will populate the dropdown with all guests initially
-
-    def load_room_grid(self):
-        # Remove old buttons
-        for i in reversed(range(self.room_grid_layout.count())):
-            widget = self.room_grid_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
-        rooms = get_all_rooms()
-        cols = 5
-        for idx, room in enumerate(rooms):
-            btn = QPushButton(f"{room['number']}\n{room.get('type','')}\n{room.get('status','')}")
-            btn.setCheckable(True)
-            btn.setMinimumSize(100, 60)
-            color = self._room_color(room.get('status',''))
-            highlight = (self.selected_room_id == room['id'])
-            style = f"background:{color};color:white;font-weight:bold;border-radius:8px;"
-            if highlight:
-                style += "border: 3px solid #f1c40f;"
-                btn.setChecked(True)
-            else:
-                style += "border: none;"
-                btn.setChecked(False)
-            btn.setStyleSheet(style)
-            if room.get('status') in ["Occupied", "Out of Order"]:
-                btn.setEnabled(False)
-            btn.clicked.connect(lambda _, rid=room['id']: self.select_room(rid))
-            self.room_grid_layout.addWidget(btn, idx // cols, idx % cols)
-
-    def _room_color(self, status):
-        return {
-            "Available": "#27ae60",
-            "Vacant": "#27ae60",  # Added Vacant status with green color
-            "Reserved": "#8e44ad",
-            "Occupied": "#c0392b",
-            "Not Available": "#95a5a6",
-            "Needs Cleaning": "#f1c40f"
-        }.get(status, "#bdc3c7")
-
-    def select_room(self, room_id):
-        """Select a room for check-in with thread safety and validation"""
-        try:
-            self.room_mutex.lock()
-            try:
-                # Verify room is still available
-                rooms = self.safe_db_operation(get_all_rooms)
-                room_info = next((r for r in rooms if r['id'] == room_id), None)
-                
-                if not room_info:
-                    raise ValidationError("Selected room not found")
-                
-                if room_info.get('status') in ["Occupied", "Out of Order"]:
-                    raise ValidationError("Selected room is not available")
-                
-                self.selected_room_id = room_id
-                self.load_room_grid()  # Refresh to update selection
-                self.update_payment_amount()  # Update payment amount when room is selected
-                
-            finally:
-                self.room_mutex.unlock()
-                # Crucial: Update wizard UI after room selection to enable/disable next button
-                self.update_wizard_ui()
-                
-        except (DatabaseError, ValidationError) as e:
-            QMessageBox.warning(self, "Error", str(e))
-            self.selected_room_id = None
-            self.load_room_grid()
-            self.update_wizard_ui() # Also update UI on error to disable button
-        except Exception as e:
-            logger.error(f"Error selecting room: {str(e)}")
-            logger.error(traceback.format_exc())
-            QMessageBox.critical(self, "Error", "An unexpected error occurred while selecting the room")
-            self.update_wizard_ui() # Also update UI on unexpected error
-
-    def update_payment_amount(self):
-        """Calculate payment amount based on room type rate and number of nights"""
-        try:
-            if not self.selected_room_id:
-                self.payment_amount.setText("0.00")
-                return
-
-            # Get room information
-            rooms = self.safe_db_operation(get_all_rooms)
-            room_info = next((r for r in rooms if r['id'] == self.selected_room_id), None)
-            if not room_info or not room_info.get('type'):
-                raise ValidationError("Invalid room selection")
-
-            # Get room rate for the room type
-            rates = self.safe_db_operation(get_room_rates)
-            room_rate = next((r['night_rate'] for r in rates if r['room_type'] == room_info['type']), None)
-            if not room_rate:
-                raise ValidationError("Room rate not found for selected room type")
-
-            # Validate dates and calculate nights
-            nights = self.validate_dates(
-                self.arrival_date.selectedDate(),
-                self.departure_date.selectedDate()
-            )
-
-            # Calculate total amount
-            total_amount = Decimal(str(room_rate)) * Decimal(str(nights))
-            self.payment_amount.setText(f"MAD {total_amount:.2f}")
-            self.update_amount_due()
-
-        except (DatabaseError, ValidationError) as e:
-            QMessageBox.warning(self, "Error", str(e))
-            self.payment_amount.setText("0.00")
-        except Exception as e:
-            logger.error(f"Error updating payment amount: {str(e)}")
-            logger.error(traceback.format_exc())
-            QMessageBox.critical(self, "Error", "An unexpected error occurred while calculating payment")
-            self.payment_amount.setText("0.00")
-
-    def update_amount_due(self):
-        try:
-            # Extract numeric values from text fields
-            total_str = self.payment_amount.text().replace('MAD ', '').strip() or '0'
-            paid_str = self.total_paid.text().strip() or '0'
-            
-            # Validate input is numeric
-            if not self.validate_payment_input(paid_str):
-                self.total_paid.setStyleSheet("background-color: #ffcccc;")
-                paid_str = '0'
-            else:
-                self.total_paid.setStyleSheet("")
-                
-            total = Decimal(total_str)
-            paid = Decimal(paid_str)
-            due = max(total - paid, Decimal('0'))
-            self.amount_due.setText(f"MAD {due:.2f}")
-        except Exception as e:
-            logger.error(f"Error updating amount due: {str(e)}")
-            self.amount_due.setText(self.payment_amount.text())
-        self.update_payment_status()
 
     def update_payment_status(self):
         try:
@@ -2156,3 +2029,291 @@ class CheckInWidget(QWidget):
             logger.error(traceback.format_exc())
             QMessageBox.critical(self, "Error", f"Failed to generate invoice PDF: {str(e)}")
             return None
+
+    def update_payment_amount(self):
+        """Update payment amount based on room rate and dates"""
+        try:
+            # Get room rate
+            if not hasattr(self, 'selected_room_id') or not self.selected_room_id:
+                self.payment_amount.setText("MAD 0.00")
+                return
+                
+            rooms = get_all_rooms()
+            room_info = next((r for r in rooms if r['id'] == self.selected_room_id), None)
+            if not room_info or not room_info.get('type'):
+                self.payment_amount.setText("MAD 0.00")
+                return
+                
+            room_rates = get_room_rates()
+            room_rate = next((rate['night_rate'] for rate in room_rates if rate['room_type'] == room_info['type']), 0)
+            
+            # Calculate number of nights
+            arrival = self.arrival_date.selectedDate().toPyDate()
+            departure = self.departure_date.selectedDate().toPyDate()
+            nights = (departure - arrival).days
+            
+            if nights < 0:
+                self.payment_amount.setText("MAD 0.00")
+                return
+            
+            # Calculate total
+            total = room_rate * nights
+            
+            # Update payment amount with MAD prefix
+            self.payment_amount.setText(f"MAD {total:.2f}")
+            
+            # Update amount due
+            self.update_amount_due()
+            
+        except Exception as e:
+            logger.error(f"Error updating payment amount: {str(e)}")
+            self.payment_amount.setText("MAD 0.00")
+
+    def update_amount_due(self):
+        """Update the amount due based on total and paid amount"""
+        try:
+            # Get total and paid amounts
+            total_str = self.payment_amount.text().replace("MAD", "").strip()
+            paid_str = self.total_paid.text().replace("MAD", "").strip()
+            
+            if not total_str:
+                self.amount_due.setText("MAD 0.00")
+                return
+            
+            # Convert to Decimal for precise calculation
+            total = Decimal(total_str)
+            paid = Decimal(paid_str or '0')
+            
+            # Calculate amount due
+            due = max(total - paid, Decimal('0'))
+            
+            # Update amount due field with MAD prefix
+            self.amount_due.setText(f"MAD {due:.2f}")
+            
+            # Update payment status
+            self.update_payment_status()
+            
+        except Exception as e:
+            logger.error(f"Error updating amount due: {str(e)}")
+            self.amount_due.setText("MAD 0.00")
+
+    def reload_guests_for_search(self):
+        """Reload guests for search when guest data changes"""
+        try:
+            # Clear and repopulate the guest combo box
+            self.guest_select_combo.clear()
+            self.populate_guest_combo()
+            
+            # Update the completer
+            guests = get_all_guests()
+            guest_names = [f"{g['first_name']} {g['last_name']}" for g in guests]
+            self.guest_completer.setModel(QStringListModel(guest_names))
+            
+        except Exception as e:
+            logger.error(f"Error reloading guests for search: {str(e)}")
+
+    def load_room_grid(self):
+        """Load and display available rooms in the grid"""
+        try:
+            # Clear existing grid
+            while self.room_grid.count():
+                item = self.room_grid.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+
+            # Get all rooms
+            rooms = get_all_rooms()
+            
+            # Group rooms by floor
+            floors = {}
+            for room in rooms:
+                floor = room.get('floor', 'Unknown')
+                if floor not in floors:
+                    floors[floor] = []
+                floors[floor].append(room)
+
+            # Create grid for each floor
+            row = 0  # Start from row 0 since we removed the legend from top
+            for floor, floor_rooms in floors.items():
+                # Add rooms for this floor
+                col = 0
+                for room in floor_rooms:
+                    # Create room button
+                    room_btn = QPushButton(f"{room['number']}\n{room.get('type','')}\n{room.get('status','')}")
+                    room_btn.setCheckable(True)
+                    room_btn.setMinimumSize(100, 60)
+                    
+                    # Store room data in the button
+                    room_btn.setProperty("room_data", room)
+                    
+                    # Set color based on status
+                    color = self._get_status_color(room.get('status',''))
+                    highlight = hasattr(self, 'selected_room_id') and self.selected_room_id == room['id']
+                    
+                    # Set initial style
+                    if highlight:
+                        style = f"""
+                            QPushButton {{
+                                background: #3498db;
+                                color: white;
+                                font-weight: bold;
+                                border-radius: 8px;
+                                padding: 5px;
+                                text-align: center;
+                                border: 3px solid #2980b9;
+                            }}
+                        """
+                        room_btn.setChecked(True)
+                    else:
+                        style = f"""
+                            QPushButton {{
+                                background: {color};
+                                color: white;
+                                font-weight: bold;
+                                border-radius: 8px;
+                                padding: 5px;
+                                text-align: center;
+                                border: none;
+                            }}
+                        """
+                        room_btn.setChecked(False)
+                    
+                    room_btn.setStyleSheet(style)
+                    
+                    # Disable non-available rooms
+                    if room.get('status') != "Available":
+                        room_btn.setEnabled(False)
+                    
+                    # Connect the clicked signal
+                    room_btn.clicked.connect(self.on_room_button_clicked)
+                    self.room_grid.addWidget(room_btn, row, col)
+                    col = (col + 1) % 4
+                    if col == 0:
+                        row += 1
+
+            # Add vertical spacer before legend
+            spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+            self.room_grid.addItem(spacer, row + 1, 0, 1, 4)
+
+            # Add legend at the bottom
+            legend_frame = QFrame()
+            legend_frame.setObjectName("legendFrame")
+            legend_layout = QHBoxLayout(legend_frame)
+            legend_layout.setSpacing(20)
+            
+            status_colors = {
+                "Vacant": "#27ae60",      # Green
+                "Reserved": "#8e44ad",    # Purple
+                "Occupied": "#c0392b",    # Red
+                "Not Available": "#95a5a6", # Gray
+                "Needs Cleaning": "#f1c40f" # Yellow
+            }
+            
+            for status, color in status_colors.items():
+                legend_item = QWidget()
+                legend_item_layout = QHBoxLayout(legend_item)
+                legend_item_layout.setContentsMargins(0, 0, 0, 0)
+                legend_item_layout.setSpacing(5)
+                
+                color_box = QLabel()
+                color_box.setFixedSize(16, 16)
+                color_box.setStyleSheet(f"background-color: {color}; border: 1px solid #ccc; border-radius: 4px;")
+                
+                status_label = QLabel(status)
+                status_label.setStyleSheet("color: #2c3e50;")
+                
+                legend_item_layout.addWidget(color_box)
+                legend_item_layout.addWidget(status_label)
+                legend_layout.addWidget(legend_item)
+            
+            legend_layout.addStretch()
+            self.room_grid.addWidget(legend_frame, row + 2, 0, 1, 4)
+
+        except Exception as e:
+            logger.error(f"Error loading room grid: {str(e)}")
+
+    def on_room_button_clicked(self):
+        """Handle room button click"""
+        try:
+            # Get the button that was clicked
+            button = self.sender()
+            if not button:
+                return
+                
+            # Get room data from button property
+            room = button.property("room_data")
+            if not room:
+                return
+                
+            # Call select_room with the room data
+            self.select_room(room)
+            
+        except Exception as e:
+            logger.error(f"Error in room button click handler: {str(e)}")
+
+    def select_room(self, room):
+        """Handle room selection"""
+        try:
+            # Store the selected room ID
+            self.selected_room_id = room['id']
+            
+            # Update room type combo box
+            index = self.room_type.findText(room['type'])
+            if index >= 0:
+                self.room_type.setCurrentIndex(index)
+            
+            # Update payment amount
+            self.update_payment_amount()
+            
+            # Update wizard UI to enable next button
+            self.update_wizard_ui()
+            
+            # Update all room buttons to reflect selection
+            for i in range(self.room_grid.count()):
+                widget = self.room_grid.itemAt(i).widget()
+                if isinstance(widget, QPushButton):
+                    room_data = widget.property("room_data")
+                    if room_data and room_data['id'] == room['id']:
+                        # Selected room - blue highlight
+                        widget.setStyleSheet("""
+                            QPushButton {
+                                background: #3498db;
+                                color: white;
+                                font-weight: bold;
+                                border-radius: 8px;
+                                padding: 5px;
+                                text-align: center;
+                                border: 3px solid #2980b9;
+                            }
+                        """)
+                        widget.setChecked(True)
+                    else:
+                        # Other rooms - reset to their status color
+                        status = room_data.get('status', '') if room_data else ''
+                        color = self._get_status_color(status)
+                        widget.setStyleSheet(f"""
+                            QPushButton {{
+                                background: {color};
+                                color: white;
+                                font-weight: bold;
+                                border-radius: 8px;
+                                padding: 5px;
+                                text-align: center;
+                                border: none;
+                            }}
+                        """)
+                        widget.setChecked(False)
+            
+        except Exception as e:
+            logger.error(f"Error selecting room: {str(e)}")
+            self.selected_room_id = None
+
+    def _get_status_color(self, status):
+        """Get the color for a room status"""
+        return {
+            "Vacant": "#27ae60",      # Green
+            "Reserved": "#8e44ad",    # Purple
+            "Occupied": "#c0392b",    # Red
+            "Not Available": "#95a5a6", # Gray
+            "Needs Cleaning": "#f1c40f" # Yellow
+        }.get(status, "#bdc3c7")  # Default gray
