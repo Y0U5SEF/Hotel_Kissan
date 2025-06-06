@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QFormLayout, QDialog, QDialogButtonBox,
     QMessageBox, QTabWidget, QTextEdit, QSpinBox, QDoubleSpinBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QResource, QFile
 from PyQt6.QtGui import QIcon
 from app.core.db import (
     add_company_account, get_company_accounts, get_company_account,
@@ -17,6 +17,7 @@ from fpdf import FPDF
 import traceback
 import logging
 from app.core.config import RECEIPTS_DIR
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -263,8 +264,8 @@ class CompanyChargesDialog(QDialog):
         
     def setup_ui(self):
         self.setWindowTitle(f"Charges - {self.company['name']}")
-        self.setMinimumWidth(800)
-        self.setMinimumHeight(600)
+        self.setMinimumWidth(1000)
+        self.setMinimumHeight(700)
         
         layout = QVBoxLayout(self)
         
@@ -372,10 +373,12 @@ class CompanyChargesDialog(QDialog):
             # Create a PDF object with UTF-8 support
             pdf = FPDF(orientation='P', unit='mm', format='A4')
             pdf.add_page()
-            pdf.set_auto_page_break(auto=True, margin=6)
-            pdf.set_left_margin(6)
-            pdf.set_top_margin(6)
-            pdf.set_right_margin(6)
+            y_margin = 7
+            x_margin = 7
+            pdf.set_auto_page_break(auto=True, margin=7)
+            pdf.set_left_margin(7)
+            pdf.set_top_margin(y_margin)
+            pdf.set_right_margin(7)
             
             # Set font with UTF-8 support
             font_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts')
@@ -388,16 +391,42 @@ class CompanyChargesDialog(QDialog):
             page_width = pdf.w - 2 * pdf.l_margin
 
             # --- Hotel Information (Header) ---
-            pdf.set_font('DejaVu', 'B', 16)
-            pdf.cell(page_width * 0.7, 10, "HOTEL KISSAN AGDZ", 0, 0, "L")
-            pdf.set_font('DejaVu', '', 10)
-            pdf.cell(page_width * 0.3, 10, "LOGO HERE", 0, 1, "R")
+            # Use Qt resource system for logo
+            logo_width = 30  # mm
+            logo_path = ":/images/logo.png"
+            qfile = QFile(logo_path)
+            if qfile.open(QFile.OpenModeFlag.ReadOnly):
+                data = qfile.readAll()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    tmp.write(data.data())
+                    tmp_path = tmp.name
+                x_logo = pdf.w - pdf.r_margin - logo_width
+                y_logo = y_margin
+                try:
+                    pdf.image(tmp_path, x=x_logo, y=y_logo, w=logo_width)
+                    pdf.ln(logo_width * 0.2)  # Adjust line spacing as needed
+                except Exception:
+                    pass  # If image fails, do nothing
             
+            pdf.set_font('DejaVu', 'B', 16)
+            pdf.set_x(x_margin)
+            pdf.set_y(y_margin)
+            pdf.cell(page_width * 0.7, 10, "HOTEL KISSAN AGDZ", 0, 1, "L")
             pdf.set_font('DejaVu', '', 10)
             pdf.cell(0, 5, "Avenue Mohamed V, Agdz, Province of Zagora, Morocco", 0, 1, "L")
-            pdf.cell(0, 5, "Phone: +212 5 44 84 30 44", 0, 1, "L")
-            pdf.cell(0, 5, "Fax: +212 5 44 84 32 58", 0, 1, "L")
-            pdf.cell(0, 5, "Email: kissane@iam.net.ma", 0, 1, "L")
+
+            pdf.cell(18, 5, "Phone", 0, 0, "L")
+            pdf.cell(3, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "+212 5 44 84 30 44", 0, 1, "L")
+
+            pdf.cell(18, 5, "Fax", 0, 0, "L")
+            pdf.cell(3, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "+212 5 44 84 32 58", 0, 1, "L")
+
+            pdf.cell(18, 5, "Courriel", 0, 0, "L")
+            pdf.cell(3, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "kissane@iam.net.ma", 0, 1, "L")
+
             pdf.ln(5)
 
             # --- Title "INVOICE" ---
@@ -436,15 +465,17 @@ class CompanyChargesDialog(QDialog):
             pdf.set_font('DejaVu', 'B', 9)  # Reduced font size for headers
             
             # Calculate column widths
-            guest_col_width = page_width * 0.35      # 33%
+            index_col_width = page_width * 0.03      # 3%
+            guest_col_width = page_width * 0.31      # 31%
             checkin_col_width = page_width * 0.12    # 12%
             checkout_col_width = page_width * 0.12   # 12%
             nights_col_width = page_width * 0.10     # 10%
             room_col_width = page_width * 0.10       # 10%
             rate_col_width = page_width * 0.10       # 10%
-            total_col_width = page_width * 0.12     # 13%
+            total_col_width = page_width * 0.12      # 12%
 
             # Table headers
+            pdf.cell(index_col_width, 6, "#", 1, 0, "C", 1)
             pdf.cell(guest_col_width, 6, "Guest Name", 1, 0, "L", 1)
             pdf.cell(checkin_col_width, 6, "Check-in", 1, 0, "C", 1)
             pdf.cell(checkout_col_width, 6, "Check-out", 1, 0, "C", 1)
@@ -455,9 +486,13 @@ class CompanyChargesDialog(QDialog):
 
             pdf.set_font('DejaVu', '', 9)  # Reduced font size for table content
             
+            # Sort charges by check-in date (most recent first)
+            sorted_charges = sorted(charges, key=lambda x: datetime.strptime(x['arrival_date'], '%Y-%m-%d'), reverse=True)
+            
             # Add all charges
             total_amount = 0
-            for charge in charges:
+            row_index = 1
+            for charge in sorted_charges:
                 # Calculate nights
                 arrival = datetime.strptime(charge['arrival_date'], '%Y-%m-%d')
                 departure = datetime.strptime(charge['departure_date'], '%Y-%m-%d')
@@ -466,21 +501,30 @@ class CompanyChargesDialog(QDialog):
                 # Calculate night rate
                 night_rate = float(charge['room_charges']) / nights if nights > 0 else 0
                 
+                # Format room number to two digits if numeric
+                room_number = charge.get('room_number', '-')
+                if room_number != '-' and str(room_number).isdigit():
+                    room_number = f"{int(room_number):02d}"
+                # else leave as is (e.g., 'Suite 3')
+                
                 # body rows height
-                row_height = 5
+                row_height = 7
 
                 # Room charges
+                pdf.cell(index_col_width, row_height, str(row_index), 1, 0, "C")
                 pdf.cell(guest_col_width, row_height, f"{charge['first_name']} {charge['last_name']}", 1, 0, "L")
                 pdf.cell(checkin_col_width, row_height, charge['arrival_date'], 1, 0, "C")
                 pdf.cell(checkout_col_width, row_height, charge['departure_date'], 1, 0, "C")
                 pdf.cell(nights_col_width, row_height, str(nights), 1, 0, "C")
-                pdf.cell(room_col_width, row_height, charge.get('room_number', '-'), 1, 0, "C")
+                pdf.cell(room_col_width, row_height, room_number, 1, 0, "C")
                 pdf.cell(rate_col_width, row_height, f"{night_rate:.2f}", 1, 0, "R")
                 pdf.cell(total_col_width, row_height, f"{float(charge['room_charges']):.2f}", 1, 1, "R")
                 total_amount += float(charge['room_charges'])
 
                 # Service charges if any
                 if float(charge['service_charges']) > 0:
+                    row_index += 1
+                    pdf.cell(index_col_width, 8, str(row_index), 1, 0, "C")
                     pdf.cell(guest_col_width, 8, f"{charge['first_name']} {charge['last_name']}", 1, 0, "L")
                     pdf.cell(checkin_col_width, 8, charge['arrival_date'], 1, 0, "L")
                     pdf.cell(checkout_col_width, 8, charge['departure_date'], 1, 0, "L")
@@ -489,6 +533,8 @@ class CompanyChargesDialog(QDialog):
                     pdf.cell(rate_col_width, 8, "-", 1, 0, "R")
                     pdf.cell(total_col_width, 8, f"{float(charge['service_charges']):.2f}", 1, 1, "R")
                     total_amount += float(charge['service_charges'])
+                
+                row_index += 1
 
             pdf.ln(2)
 
@@ -504,31 +550,65 @@ class CompanyChargesDialog(QDialog):
             pdf.cell(page_width * 0.2, 8, f"{total_amount:.2f} MAD", 1, 1, "R")
             pdf.ln(20)
 
-            # --- Payment Information ---
-            pdf.set_font('DejaVu', 'B', 12)
-            pdf.cell(0, 10, "PAYMENT INFORMATION", 0, 1, "L")
-            pdf.set_font('DejaVu', '', 10)
-            pdf.cell(0, 5, "Please make payment to:", 0, 1, "L")
-            pdf.cell(0, 5, "Banque Populaire", 0, 1, "L")
-            pdf.cell(0, 5, "RIB: 10156621211 1470932000567", 0, 1, "L")
-            pdf.ln(5)
-
+            # ----------------------------------- F O O T E R -----------------------------------------
+            pdf.set_font('DejaVu', '', 11)
             # --- Footer ---
-            footer_text = "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business.\n\nICE 001743O83000092\nPatente N°457700803 IF N°6590375 R.C N°12/58"
-            
-            # Position footer at bottom
-            footer_content_height = 30
+            # Calculate height of individual footer sections
+            # Each detail line (RIB, ICE, etc.) is 5mm high
+            num_info_lines = 5 # RIB, ICE, Patente, IF, R.C
+            height_of_detail_lines = 5 * num_info_lines # 5 lines * 5mm height each = 25mm
+
+            # Space after the horizontal line, before the 'Thank you' message
+            height_of_line_break_after_details = 6 # From pdf.ln(5) after the line
+
+            # The 'Thank you' message is a multi_cell with height 5mm per line.
+            # Assuming this specific text fits on one line, its height is 5mm.
+            # If the text were longer and wrapped, this would need more sophisticated calculation.
+            height_of_thank_you_message = 5 # 1 line * 5mm height = 5mm
+
+            # Total calculated height for all footer content before positioning
+            footer_content_height = height_of_detail_lines + height_of_line_break_after_details + height_of_thank_you_message
+
+            # Position footer at bottom based on calculated height
             footer_start_y = pdf.h - pdf.b_margin - footer_content_height
             pdf.set_y(footer_start_y)
+            
+            info_cell_width = 52
+            colon_width = 5 # Small fixed width for the colon cell
 
-            # Draw line
-            pdf.set_draw_color(0, 0, 0)
-            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            # Print RIB, ICE, Patente, IF, R.C lines
+            pdf.cell(info_cell_width, 5, "RIB (Banque Populaire)", 0, 0, "L")
+            pdf.cell(colon_width, 5, ":", 0, 0, "L") # Fixed width for colon
+            pdf.cell(0, 5, "101 566 2121114709320005 67", 0, 1, "L") # Remaining width
+
+            pdf.cell(info_cell_width, 5, "ICE", 0, 0, "L")
+            pdf.cell(colon_width, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "001743O83000092", 0, 1, "L")
+
+            pdf.cell(info_cell_width, 5, "Patente N°", 0, 0, "L")
+            pdf.cell(colon_width, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "457700803", 0, 1, "L")
+
+            pdf.cell(info_cell_width, 5, "IF N°", 0, 0, "L")
+            pdf.cell(colon_width, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "6590375", 0, 1, "L")
+
+            pdf.cell(info_cell_width, 5, "R.C N°", 0, 0, "L")
+            pdf.cell(colon_width, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "12/58", 0, 1, "L")
             pdf.ln(5)
 
-            # Add footer text
-            pdf.set_font('DejaVu', '', 10)
+            # Draw horizontal line
+            pdf.set_draw_color(0, 0, 0)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.ln(1) # Add a small line break after the line for spacing
+
+            # Redefine footer_text to only contain the thank you message
+            footer_text = "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business."
             pdf.multi_cell(0, 5, footer_text, 0, "C")
+            
+
+
 
             # Save the PDF
             output_pdf_file = os.path.join(RECEIPTS_DIR, f"company_invoice_{company['id']}_{datetime.now().strftime('%Y%m%d')}.pdf")
