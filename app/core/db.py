@@ -30,13 +30,19 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
-            id_number TEXT UNIQUE,
+            id_type TEXT,
+            id_number TEXT,
+            dob TEXT,
             nationality TEXT,
-            phone TEXT,
+            phone_code TEXT,
+            phone_number TEXT,
             email TEXT,
+            address TEXT,
+            vip_status TEXT,
+            preferences TEXT,
             company_id INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (company_id) REFERENCES company_accounts(id)
+            FOREIGN KEY (company_id) REFERENCES company_accounts(id) ON DELETE SET NULL
         )
     ''')
     
@@ -211,16 +217,23 @@ def insert_guest(guest):
     try:
         c.execute('''
             INSERT INTO guests (
-                first_name, last_name, id_number, nationality,
-                phone, email, company_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                first_name, last_name, id_type, id_number, dob,
+                nationality, phone_code, phone_number, email,
+                address, vip_status, preferences, company_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             guest['first_name'],
             guest['last_name'],
+            guest.get('id_type'),
             guest.get('id_number'),
+            guest.get('dob'),
             guest.get('nationality'),
-            guest.get('phone'),
+            guest.get('phone_code'),
+            guest.get('phone_number'),
             guest.get('email'),
+            guest.get('address'),
+            guest.get('vip_status'),
+            guest.get('preferences'),
             guest.get('company_id')
         ))
         conn.commit()
@@ -240,19 +253,31 @@ def update_guest(guest_id, guest):
         UPDATE guests SET
             first_name = ?,
             last_name = ?,
+            id_type = ?,
             id_number = ?,
+            dob = ?,
             nationality = ?,
-            phone = ?,
+            phone_code = ?,
+            phone_number = ?,
             email = ?,
+            address = ?,
+            vip_status = ?,
+            preferences = ?,
             company_id = ?
         WHERE id = ?
     ''', (
         guest['first_name'],
         guest['last_name'],
+        guest.get('id_type'),
         guest.get('id_number'),
+        guest.get('dob'),
         guest.get('nationality'),
-        guest.get('phone'),
+        guest.get('phone_code'),
+        guest.get('phone_number'),
         guest.get('email'),
+        guest.get('address'),
+        guest.get('vip_status'),
+        guest.get('preferences'),
         guest.get('company_id'),
         guest_id
     ))
@@ -998,10 +1023,12 @@ def get_company_charges(company_id=None, is_paid=None):
     c = conn.cursor()
     
     query = '''
-        SELECT cc.*, g.first_name, g.last_name, ci.checkin_id, ci.arrival_date, ci.departure_date
+        SELECT cc.*, g.first_name, g.last_name, ci.checkin_id, ci.arrival_date, ci.departure_date,
+               r.number as room_number
         FROM company_charges cc
         JOIN guests g ON cc.guest_id = g.id
-        JOIN check_ins ci ON cc.checkin_id = ci.id
+        JOIN check_ins ci ON cc.checkin_id = ci.checkin_id
+        LEFT JOIN rooms r ON ci.room_id = r.id
     '''
     params = []
     

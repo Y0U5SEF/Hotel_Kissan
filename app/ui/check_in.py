@@ -187,11 +187,12 @@ class CheckInWidget(QWidget):
             self.checkin_id = str(uuid.uuid4())[:8]
             self.selected_room_id = None
             self.reload_guests_for_search()
+            # Populate room types before loading room grid
+            self.populate_room_types()
             self.load_room_grid()
         elif tab_name == "Check-out":
             self.load_checked_in_guests()
-            self.populate_tax_options() # Populate tax options when entering checkout tab
-
+            self.populate_tax_options()
 
     def setup_checkin_list_tab(self):
         layout = QVBoxLayout(self.checkin_list_tab)
@@ -411,7 +412,7 @@ class CheckInWidget(QWidget):
         departure_layout.addWidget(departure_label)
         
         self.departure_date = QCalendarWidget()
-        self.departure_date.setMinimumDate(QDate.currentDate().addDays(1))
+        # self.departure_date.setMinimumDate(QDate.currentDate().addDays(1))
         self.departure_date.setMinimumWidth(350)
         self.departure_date.setMinimumHeight(250)
         departure_layout.addWidget(self.departure_date)
@@ -461,6 +462,8 @@ class CheckInWidget(QWidget):
         
         self.room_type = QComboBox()
         self.room_type.setMinimumWidth(200)
+        self.room_type.addItem("All Room Types", None)  # Add "All" option
+        self.room_type.currentIndexChanged.connect(self.load_room_grid)  # Connect to reload grid when type changes
         room_type_layout.addWidget(self.room_type)
         room_type_layout.addStretch()
         
@@ -475,9 +478,11 @@ class CheckInWidget(QWidget):
         room_grid_layout.setSpacing(10)
         room_grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align to top
         
-        self.room_grid = QGridLayout()
+        # Create a widget to hold the grid layout
+        room_grid_widget = QWidget()
+        self.room_grid = QGridLayout(room_grid_widget)
         self.room_grid.setSpacing(10)
-        room_grid_layout.addLayout(self.room_grid)
+        room_grid_layout.addWidget(room_grid_widget)
         
         s3_layout.addWidget(room_grid_container)
         
@@ -1457,12 +1462,26 @@ class CheckInWidget(QWidget):
 
             # If guest has company and company billing is selected, create company charge
             if guest_data and guest_data.get('company_id') and self.bill_to_company.isChecked():
+                # Calculate room charges
+                arrival = self.arrival_date.selectedDate().toPyDate()
+                departure = self.departure_date.selectedDate().toPyDate()
+                nights = (departure - arrival).days
+                if nights < 0:
+                    nights = 0
+                room_info = next((r for r in rooms if r['id'] == self.selected_room_id), None)
+                room_rate = 0
+                if room_info:
+                    room_rates = get_room_rates()
+                    room_rate = next((rate['night_rate'] for rate in room_rates if rate['room_type'] == room_info['type']), 0)
+                room_charges = float(room_rate) * nights
+                # If you have extra services, calculate service_charges here. For now, set to 0.
+                service_charges = 0.0
                 company_charge = {
                     'company_id': guest_data['company_id'],
                     'checkin_id': checkin_data['checkin_id'],
                     'guest_id': guest_id,
-                    'room_charges': float(self.room_charges.text().replace('MAD ', '').strip() or '0'),
-                    'service_charges': float(self.service_charges.text().replace('MAD ', '').strip() or '0'),
+                    'room_charges': room_charges,
+                    'service_charges': service_charges,
                     'total_amount': float(total_amount),
                     'notes': f"Check-in {self.checkin_id} - {self.guest_first_name_label.text()} {self.guest_last_name_label.text()}"
                 }
@@ -1691,7 +1710,7 @@ class CheckInWidget(QWidget):
             self.checkin_table.setItem(row, 2, QTableWidgetItem(checkin['arrival_date']))
             self.checkin_table.setItem(row, 3, QTableWidgetItem(checkin['departure_date']))
             self.checkin_table.setItem(row, 4, QTableWidgetItem(f"{checkin['room_type']} #{checkin['room_number']}"))
-            self.checkin_table.setItem(row, 5, QTableWidgetItem(checkin['status']))
+            self.checkin_table.setItem(row, 5, QTableWidgetItem(checkin.get('status', 'N/A')))
             
             # Add action buttons
             actions_widget = QWidget()
@@ -2124,6 +2143,17 @@ class CheckInWidget(QWidget):
             # Get all rooms
             rooms = get_all_rooms()
             
+            # Get selected room type filter
+            selected_type = self.room_type.currentData()
+            
+            # Filter rooms by type if a specific type is selected
+            if selected_type:
+                rooms = [room for room in rooms if room.get('type') == selected_type]
+            
+            # Sort rooms by type (Single -> Double -> Suite)
+            type_order = {'Single': 0, 'Double': 1, 'Suite': 2}
+            rooms.sort(key=lambda x: (type_order.get(x.get('type', ''), 999), x.get('number', '')))
+            
             # Group rooms by floor
             floors = {}
             for room in rooms:
@@ -2133,7 +2163,7 @@ class CheckInWidget(QWidget):
                 floors[floor].append(room)
 
             # Create grid for each floor
-            row = 0  # Start from row 0 since we removed the legend from top
+            row = 0
             for floor, floor_rooms in floors.items():
                 # Add rooms for this floor
                 col = 0
@@ -2154,13 +2184,13 @@ class CheckInWidget(QWidget):
                     if highlight:
                         style = f"""
                             QPushButton {{
-                                background: #3498db;
+                                background: #1a73e8;
                                 color: white;
                                 font-weight: bold;
                                 border-radius: 8px;
                                 padding: 5px;
                                 text-align: center;
-                                border: 3px solid #2980b9;
+                                border: none;
                             }}
                         """
                         room_btn.setChecked(True)
@@ -2180,20 +2210,22 @@ class CheckInWidget(QWidget):
                     
                     room_btn.setStyleSheet(style)
                     
-                    # Disable non-available rooms
-                    if room.get('status') != "Available":
-                        room_btn.setEnabled(False)
+                    # Only disable rooms that are not available
+                    is_available = room.get('status') in ["Available", "Vacant"]
+                    room_btn.setEnabled(is_available)
                     
-                    # Connect the clicked signal
-                    room_btn.clicked.connect(self.on_room_button_clicked)
+                    # Connect the clicked signal using a lambda that captures the room data
+                    room_btn.clicked.connect(lambda checked, r=room: self.select_room(r))
+                    
+                    # Add button to grid
                     self.room_grid.addWidget(room_btn, row, col)
-                    col = (col + 1) % 4
+                    col = (col + 1) % 6
                     if col == 0:
                         row += 1
 
             # Add vertical spacer before legend
             spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-            self.room_grid.addItem(spacer, row + 1, 0, 1, 4)
+            self.room_grid.addItem(spacer, row + 1, 0, 1, 6)
 
             # Add legend at the bottom
             legend_frame = QFrame()
@@ -2227,29 +2259,13 @@ class CheckInWidget(QWidget):
                 legend_layout.addWidget(legend_item)
             
             legend_layout.addStretch()
-            self.room_grid.addWidget(legend_frame, row + 2, 0, 1, 4)
+            self.room_grid.addWidget(legend_frame, row + 2, 0, 1, 6)
+
+            # Update wizard UI after loading rooms
+            self.update_wizard_ui()
 
         except Exception as e:
             logger.error(f"Error loading room grid: {str(e)}")
-
-    def on_room_button_clicked(self):
-        """Handle room button click"""
-        try:
-            # Get the button that was clicked
-            button = self.sender()
-            if not button:
-                return
-                
-            # Get room data from button property
-            room = button.property("room_data")
-            if not room:
-                return
-                
-            # Call select_room with the room data
-            self.select_room(room)
-            
-        except Exception as e:
-            logger.error(f"Error in room button click handler: {str(e)}")
 
     def select_room(self, room):
         """Handle room selection"""
@@ -2265,9 +2281,6 @@ class CheckInWidget(QWidget):
             # Update payment amount
             self.update_payment_amount()
             
-            # Update wizard UI to enable next button
-            self.update_wizard_ui()
-            
             # Update all room buttons to reflect selection
             for i in range(self.room_grid.count()):
                 widget = self.room_grid.itemAt(i).widget()
@@ -2277,13 +2290,13 @@ class CheckInWidget(QWidget):
                         # Selected room - blue highlight
                         widget.setStyleSheet("""
                             QPushButton {
-                                background: #3498db;
+                                background: #1a73e8;
                                 color: white;
                                 font-weight: bold;
                                 border-radius: 8px;
                                 padding: 5px;
                                 text-align: center;
-                                border: 3px solid #2980b9;
+                                border: none;
                             }
                         """)
                         widget.setChecked(True)
@@ -2304,6 +2317,9 @@ class CheckInWidget(QWidget):
                         """)
                         widget.setChecked(False)
             
+            # Update wizard UI to enable next button
+            self.update_wizard_ui()
+            
         except Exception as e:
             logger.error(f"Error selecting room: {str(e)}")
             self.selected_room_id = None
@@ -2317,3 +2333,21 @@ class CheckInWidget(QWidget):
             "Not Available": "#95a5a6", # Gray
             "Needs Cleaning": "#f1c40f" # Yellow
         }.get(status, "#bdc3c7")  # Default gray
+
+    def populate_room_types(self):
+        """Populate room type combo box with available room types"""
+        try:
+            # Clear existing items except "All Room Types"
+            self.room_type.clear()
+            self.room_type.addItem("All Room Types", None)
+            
+            # Get all rooms and extract unique room types
+            rooms = get_all_rooms()
+            room_types = sorted(set(room.get('type') for room in rooms if room.get('type')))
+            
+            # Add room types to combo box
+            for room_type in room_types:
+                self.room_type.addItem(room_type, room_type)
+                
+        except Exception as e:
+            logger.error(f"Error populating room types: {str(e)}")

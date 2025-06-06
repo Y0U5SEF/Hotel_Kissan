@@ -11,6 +11,14 @@ from app.core.db import (
     update_company_account, get_company_charges, mark_company_charge_paid,
     get_company_balance
 )
+import os
+from datetime import datetime, timedelta
+from fpdf import FPDF
+import traceback
+import logging
+from app.core.config import RECEIPTS_DIR
+
+logger = logging.getLogger(__name__)
 
 class CompanyAccountDialog(QDialog):
     """Dialog for adding/editing company accounts"""
@@ -140,6 +148,8 @@ class CompanyAccountsWidget(QWidget):
         
         # Company accounts table
         self.company_table = QTableWidget()
+        self.company_table.verticalHeader().setDefaultSectionSize(50)
+        self.company_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.company_table.setColumnCount(8)
         self.company_table.setHorizontalHeaderLabels([
             "Company Name", "Address", "Phone", "Email",
@@ -269,12 +279,18 @@ class CompanyChargesDialog(QDialog):
         
         layout.addWidget(info_frame)
         
+        # Add Generate Invoice button at the top
+        invoice_btn = QPushButton("Generate Invoice")
+        invoice_btn.setObjectName("actionButton")
+        invoice_btn.clicked.connect(self.generate_company_invoice_all)
+        layout.addWidget(invoice_btn)
+        
         # Charges table
         self.charges_table = QTableWidget()
-        self.charges_table.setColumnCount(8)
+        self.charges_table.setColumnCount(10)
         self.charges_table.setHorizontalHeaderLabels([
             "Date", "Guest", "Check-in ID", "Arrival", "Departure",
-            "Room Charges", "Service Charges", "Total", "Status"
+            "Room Number", "Room Charges", "Service Charges", "Total", "Status"
         ])
         self.charges_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.charges_table.setAlternatingRowColors(True)
@@ -310,40 +326,218 @@ class CompanyChargesDialog(QDialog):
             # Departure
             self.charges_table.setItem(row, 4, QTableWidgetItem(charge['departure_date']))
             
+            # Room Number
+            self.charges_table.setItem(row, 5, QTableWidgetItem(charge.get('room_number', '-')))
+            
             # Room Charges
             room_charges = f"{charge['room_charges']:.2f} MAD"
-            self.charges_table.setItem(row, 5, QTableWidgetItem(room_charges))
+            self.charges_table.setItem(row, 6, QTableWidgetItem(room_charges))
             
             # Service Charges
             service_charges = f"{charge['service_charges']:.2f} MAD"
-            self.charges_table.setItem(row, 6, QTableWidgetItem(service_charges))
+            self.charges_table.setItem(row, 7, QTableWidgetItem(service_charges))
             
             # Total
             total = f"{charge['total_amount']:.2f} MAD"
-            self.charges_table.setItem(row, 7, QTableWidgetItem(total))
+            self.charges_table.setItem(row, 8, QTableWidgetItem(total))
             
             # Status
             status = "Paid" if charge['is_paid'] else "Unpaid"
             status_item = QTableWidgetItem(status)
             status_item.setForeground(Qt.GlobalColor.green if charge['is_paid'] else Qt.GlobalColor.red)
-            self.charges_table.setItem(row, 8, status_item)
-            
-            # Add mark as paid button if unpaid
-            if not charge['is_paid']:
-                mark_paid_btn = QPushButton("Mark as Paid")
-                mark_paid_btn.setObjectName("tableButton")
-                mark_paid_btn.clicked.connect(lambda checked, c=charge: self.mark_as_paid(c))
-                self.charges_table.setCellWidget(row, 9, mark_paid_btn)
+            self.charges_table.setItem(row, 9, status_item)
     
-    def mark_as_paid(self, charge):
-        """Mark a charge as paid"""
-        reply = QMessageBox.question(
-            self,
-            "Confirm Payment",
-            f"Mark charge of {charge['total_amount']:.2f} MAD as paid?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            mark_company_charge_paid(charge['id'])
-            self.load_charges() 
+    def generate_company_invoice_all(self):
+        """Generate invoice for all company charges"""
+        try:
+            charges = get_company_charges(self.company['id'])
+            if not charges:
+                QMessageBox.warning(self, "Warning", "No charges found for this company.")
+                return
+                
+            invoice_path = self.generate_company_invoice(self.company, charges)
+            if invoice_path:
+                # Open the PDF file
+                os.startfile(invoice_path) if os.name == 'nt' else os.system(f'xdg-open "{invoice_path}"')
+        except Exception as e:
+            logger.error(f"Error generating invoice: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to generate invoice: {str(e)}")
+
+    def generate_company_invoice(self, company, charges):
+        """Generate company invoice using FPDF"""
+        try:
+            # Create receipts directory if it doesn't exist
+            os.makedirs(RECEIPTS_DIR, exist_ok=True)
+            
+            # Create a PDF object with UTF-8 support
+            pdf = FPDF(orientation='P', unit='mm', format='A4')
+            pdf.add_page()
+            pdf.set_auto_page_break(auto=True, margin=6)
+            pdf.set_left_margin(6)
+            pdf.set_top_margin(6)
+            pdf.set_right_margin(6)
+            
+            # Set font with UTF-8 support
+            font_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts')
+            font_path_regular = os.path.join(font_dir, 'DejaVuSans.ttf')
+            font_path_bold = os.path.join(font_dir, 'DejaVuSans-Bold.ttf')
+            pdf.add_font('DejaVu', '', font_path_regular, uni=True)
+            pdf.add_font('DejaVu', 'B', font_path_bold, uni=True)
+            pdf.set_font('DejaVu', '', 10)
+
+            page_width = pdf.w - 2 * pdf.l_margin
+
+            # --- Hotel Information (Header) ---
+            pdf.set_font('DejaVu', 'B', 16)
+            pdf.cell(page_width * 0.7, 10, "HOTEL KISSAN AGDZ", 0, 0, "L")
+            pdf.set_font('DejaVu', '', 10)
+            pdf.cell(page_width * 0.3, 10, "LOGO HERE", 0, 1, "R")
+            
+            pdf.set_font('DejaVu', '', 10)
+            pdf.cell(0, 5, "Avenue Mohamed V, Agdz, Province of Zagora, Morocco", 0, 1, "L")
+            pdf.cell(0, 5, "Phone: +212 5 44 84 30 44", 0, 1, "L")
+            pdf.cell(0, 5, "Fax: +212 5 44 84 32 58", 0, 1, "L")
+            pdf.cell(0, 5, "Email: kissane@iam.net.ma", 0, 1, "L")
+            pdf.ln(5)
+
+            # --- Title "INVOICE" ---
+            pdf.set_font('DejaVu', 'B', 24)
+            pdf.cell(0, 15, "INVOICE", 0, 1, "C")
+            pdf.ln(3)
+
+            # --- Two Columns: Invoice Details (Left) and Billed To (Right) ---
+            col_width = page_width / 2
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(col_width, 5, "Invoice Details:", 0, 0, "L")
+            pdf.cell(col_width, 5, "Billed To:", 0, 1, "L")
+            
+            pdf.set_font('DejaVu', '', 10)
+            invoice_date = datetime.now().strftime('%d-%m-%Y')
+            
+            # Left Column: Invoice Number, Invoice Date
+            pdf.cell(col_width, 4, f"Invoice Number: INV-{company['id']}-{datetime.now().strftime('%Y%m%d')}", 0, 0, "L")
+            # Right Column: Company Name
+            pdf.cell(col_width, 4, f"Company: {company['name']}", 0, 1, "L")
+
+            pdf.cell(col_width, 4, f"Invoice Date: {invoice_date}", 0, 0, "L")
+            # Right Column: Company Address
+            pdf.cell(col_width, 4, f"Address: {company.get('address', '')}", 0, 1, "L")
+
+            pdf.cell(col_width, 4, f"Due Date: {(datetime.now() + timedelta(days=company.get('payment_due_days', 30))).strftime('%d-%m-%Y')}", 0, 0, "L")
+            # Right Column: Company Tax ID
+            pdf.cell(col_width, 4, f"Tax ID: {company.get('tax_id', '')}", 0, 1, "L")
+            pdf.ln(2)
+
+            # --- Stay Details Table ---
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(0, 10, "Stay Details:", 0, 1, "L")
+            pdf.set_fill_color(200, 220, 255)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font('DejaVu', 'B', 9)  # Reduced font size for headers
+            
+            # Calculate column widths
+            guest_col_width = page_width * 0.35      # 33%
+            checkin_col_width = page_width * 0.12    # 12%
+            checkout_col_width = page_width * 0.12   # 12%
+            nights_col_width = page_width * 0.10     # 10%
+            room_col_width = page_width * 0.10       # 10%
+            rate_col_width = page_width * 0.10       # 10%
+            total_col_width = page_width * 0.12     # 13%
+
+            # Table headers
+            pdf.cell(guest_col_width, 6, "Guest Name", 1, 0, "L", 1)
+            pdf.cell(checkin_col_width, 6, "Check-in", 1, 0, "C", 1)
+            pdf.cell(checkout_col_width, 6, "Check-out", 1, 0, "C", 1)
+            pdf.cell(nights_col_width, 6, "Nights", 1, 0, "C", 1)
+            pdf.cell(room_col_width, 6, "Room N", 1, 0, "C", 1)
+            pdf.cell(rate_col_width, 6, "Rate", 1, 0, "R", 1)
+            pdf.cell(total_col_width, 6, "Total", 1, 1, "R", 1)
+
+            pdf.set_font('DejaVu', '', 9)  # Reduced font size for table content
+            
+            # Add all charges
+            total_amount = 0
+            for charge in charges:
+                # Calculate nights
+                arrival = datetime.strptime(charge['arrival_date'], '%Y-%m-%d')
+                departure = datetime.strptime(charge['departure_date'], '%Y-%m-%d')
+                nights = (departure - arrival).days
+                
+                # Calculate night rate
+                night_rate = float(charge['room_charges']) / nights if nights > 0 else 0
+                
+                # body rows height
+                row_height = 5
+
+                # Room charges
+                pdf.cell(guest_col_width, row_height, f"{charge['first_name']} {charge['last_name']}", 1, 0, "L")
+                pdf.cell(checkin_col_width, row_height, charge['arrival_date'], 1, 0, "C")
+                pdf.cell(checkout_col_width, row_height, charge['departure_date'], 1, 0, "C")
+                pdf.cell(nights_col_width, row_height, str(nights), 1, 0, "C")
+                pdf.cell(room_col_width, row_height, charge.get('room_number', '-'), 1, 0, "C")
+                pdf.cell(rate_col_width, row_height, f"{night_rate:.2f}", 1, 0, "R")
+                pdf.cell(total_col_width, row_height, f"{float(charge['room_charges']):.2f}", 1, 1, "R")
+                total_amount += float(charge['room_charges'])
+
+                # Service charges if any
+                if float(charge['service_charges']) > 0:
+                    pdf.cell(guest_col_width, 8, f"{charge['first_name']} {charge['last_name']}", 1, 0, "L")
+                    pdf.cell(checkin_col_width, 8, charge['arrival_date'], 1, 0, "L")
+                    pdf.cell(checkout_col_width, 8, charge['departure_date'], 1, 0, "L")
+                    pdf.cell(nights_col_width, 8, "-", 1, 0, "C")
+                    pdf.cell(room_col_width, 8, "-", 1, 0, "L")
+                    pdf.cell(rate_col_width, 8, "-", 1, 0, "R")
+                    pdf.cell(total_col_width, 8, f"{float(charge['service_charges']):.2f}", 1, 1, "R")
+                    total_amount += float(charge['service_charges'])
+
+            pdf.ln(2)
+
+            # --- Totals (Right Aligned) ---
+            pdf.set_x(pdf.l_margin + page_width * 0.6)
+            pdf.set_font('DejaVu', '', 10)
+            pdf.cell(page_width * 0.2, 8, "Subtotal:", 1, 0, "L")
+            pdf.cell(page_width * 0.2, 8, f"{total_amount:.2f} MAD", 1, 1, "R")
+            
+            pdf.set_x(pdf.l_margin + page_width * 0.6)
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(page_width * 0.2, 8, "Total Due:", 1, 0, "L")
+            pdf.cell(page_width * 0.2, 8, f"{total_amount:.2f} MAD", 1, 1, "R")
+            pdf.ln(20)
+
+            # --- Payment Information ---
+            pdf.set_font('DejaVu', 'B', 12)
+            pdf.cell(0, 10, "PAYMENT INFORMATION", 0, 1, "L")
+            pdf.set_font('DejaVu', '', 10)
+            pdf.cell(0, 5, "Please make payment to:", 0, 1, "L")
+            pdf.cell(0, 5, "Banque Populaire", 0, 1, "L")
+            pdf.cell(0, 5, "RIB: 10156621211 1470932000567", 0, 1, "L")
+            pdf.ln(5)
+
+            # --- Footer ---
+            footer_text = "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business.\n\nICE 001743O83000092\nPatente N°457700803 IF N°6590375 R.C N°12/58"
+            
+            # Position footer at bottom
+            footer_content_height = 30
+            footer_start_y = pdf.h - pdf.b_margin - footer_content_height
+            pdf.set_y(footer_start_y)
+
+            # Draw line
+            pdf.set_draw_color(0, 0, 0)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.ln(5)
+
+            # Add footer text
+            pdf.set_font('DejaVu', '', 10)
+            pdf.multi_cell(0, 5, footer_text, 0, "C")
+
+            # Save the PDF
+            output_pdf_file = os.path.join(RECEIPTS_DIR, f"company_invoice_{company['id']}_{datetime.now().strftime('%Y%m%d')}.pdf")
+            pdf.output(output_pdf_file)
+            
+            return output_pdf_file
+
+        except Exception as e:
+            logger.error(f"Error generating company invoice: {str(e)}")
+            logger.error(traceback.format_exc())
+            QMessageBox.critical(self, "Error", f"Failed to generate company invoice: {str(e)}")
+            return None 
