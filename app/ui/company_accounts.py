@@ -2,14 +2,15 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QTableWidget, QTableWidgetItem, QHeaderView,
     QLineEdit, QFormLayout, QDialog, QDialogButtonBox,
-    QMessageBox, QTabWidget, QTextEdit, QSpinBox, QDoubleSpinBox
+    QMessageBox, QTabWidget, QTextEdit, QSpinBox, QDoubleSpinBox,
+    QCheckBox, QComboBox, QGroupBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QResource, QFile
 from PyQt6.QtGui import QIcon
 from app.core.db import (
     add_company_account, get_company_accounts, get_company_account,
     update_company_account, get_company_charges, mark_company_charge_paid,
-    get_company_balance
+    get_company_balance, get_tax_rates
 )
 import os
 from datetime import datetime, timedelta
@@ -18,6 +19,7 @@ import traceback
 import logging
 from app.core.config import RECEIPTS_DIR
 import tempfile
+from num2words import num2words
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +282,33 @@ class CompanyChargesDialog(QDialog):
         
         layout.addWidget(info_frame)
         
+        # --- Tax Selection Section ---
+        self.tax_options = {}
+        tax_rates = get_tax_rates()
+        tax_group = QGroupBox("Apply Taxes")
+        tax_layout = QVBoxLayout()
+        for tax in tax_rates:
+            row_layout = QHBoxLayout()
+            label = tax['name']
+            if tax['tax_type'] == 'fixed':
+                label += f" ({float(tax['amount']):.2f} MAD)"
+            elif tax['tax_type'] == 'percentage':
+                label += f" ({float(tax['percentage']):.2f}%)"
+            cb = QCheckBox(label)
+            cb.setChecked(True)
+            row_layout.addWidget(cb)
+            if tax['tax_type'] == 'fixed':
+                mode = QComboBox()
+                mode.addItems(["per stay", "per night"])
+                mode.setCurrentText("per night")  # Default to per night for all fixed taxes
+                row_layout.addWidget(mode)
+                self.tax_options[tax['id']] = {'checkbox': cb, 'mode': mode, 'tax': tax}
+            else:
+                self.tax_options[tax['id']] = {'checkbox': cb, 'tax': tax}
+            tax_layout.addLayout(row_layout)
+        tax_group.setLayout(tax_layout)
+        layout.addWidget(tax_group)
+        
         # Add Generate Invoice button at the top
         invoice_btn = QPushButton("Generate Invoice")
         invoice_btn.setObjectName("actionButton")
@@ -355,8 +384,17 @@ class CompanyChargesDialog(QDialog):
             if not charges:
                 QMessageBox.warning(self, "Warning", "No charges found for this company.")
                 return
-                
-            invoice_path = self.generate_company_invoice(self.company, charges)
+
+            # Gather selected taxes and their modes
+            selected_taxes = []
+            for tax_id, opt in self.tax_options.items():
+                if opt['checkbox'].isChecked():
+                    mode = None
+                    if 'mode' in opt:
+                        mode = opt['mode'].currentText()
+                    selected_taxes.append({'tax': opt['tax'], 'mode': mode})
+
+            invoice_path = self.generate_company_invoice(self.company, charges, selected_taxes)
             if invoice_path:
                 # Open the PDF file
                 os.startfile(invoice_path) if os.name == 'nt' else os.system(f'xdg-open "{invoice_path}"')
@@ -364,7 +402,7 @@ class CompanyChargesDialog(QDialog):
             logger.error(f"Error generating invoice: {str(e)}")
             QMessageBox.critical(self, "Error", f"Failed to generate invoice: {str(e)}")
 
-    def generate_company_invoice(self, company, charges):
+    def generate_company_invoice(self, company, charges, selected_taxes=None):
         """Generate company invoice using FPDF"""
         try:
             # Create receipts directory if it doesn't exist
@@ -462,7 +500,7 @@ class CompanyChargesDialog(QDialog):
             pdf.cell(0, 10, "Stay Details:", 0, 1, "L")
             pdf.set_fill_color(200, 220, 255)
             pdf.set_text_color(0, 0, 0)
-            pdf.set_font('DejaVu', 'B', 9)  # Reduced font size for headers
+            pdf.set_font('DejaVu', 'B', 8)  # Reduced font size for headers
             
             # Calculate column widths
             index_col_width = page_width * 0.03      # 3%
@@ -480,9 +518,9 @@ class CompanyChargesDialog(QDialog):
             pdf.cell(checkin_col_width, 6, "Check-in", 1, 0, "C", 1)
             pdf.cell(checkout_col_width, 6, "Check-out", 1, 0, "C", 1)
             pdf.cell(nights_col_width, 6, "Nights", 1, 0, "C", 1)
-            pdf.cell(room_col_width, 6, "Room N", 1, 0, "C", 1)
-            pdf.cell(rate_col_width, 6, "Rate", 1, 0, "R", 1)
-            pdf.cell(total_col_width, 6, "Total", 1, 1, "R", 1)
+            pdf.cell(room_col_width, 6, "Room N°", 1, 0, "C", 1)
+            pdf.cell(rate_col_width, 6, "Rate (MAD)", 1, 0, "R", 1)
+            pdf.cell(total_col_width, 6, "Total (MAD)", 1, 1, "R", 1)
 
             pdf.set_font('DejaVu', '', 9)  # Reduced font size for table content
             
@@ -539,16 +577,60 @@ class CompanyChargesDialog(QDialog):
             pdf.ln(2)
 
             # --- Totals (Right Aligned) ---
-            pdf.set_x(pdf.l_margin + page_width * 0.6)
-            pdf.set_font('DejaVu', '', 10)
-            pdf.cell(page_width * 0.2, 8, "Subtotal:", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"{total_amount:.2f} MAD", 1, 1, "R")
+            num_stays = len(sorted_charges)
+            total_nights = sum((datetime.strptime(charge['departure_date'], '%Y-%m-%d') - datetime.strptime(charge['arrival_date'], '%Y-%m-%d')).days for charge in sorted_charges)
+            totals_left_col_width = page_width * 0.44
+            totals_right_col_width = page_width * 0.22
+            totals_x = pdf.l_margin + index_col_width + guest_col_width
+            pdf.set_font('DejaVu', '', 9)
             
-            pdf.set_x(pdf.l_margin + page_width * 0.6)
-            pdf.set_font('DejaVu', 'B', 12)
-            pdf.cell(page_width * 0.2, 8, "Total Due:", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"{total_amount:.2f} MAD", 1, 1, "R")
-            pdf.ln(20)
+            pdf.set_x(totals_x)
+            pdf.cell(totals_left_col_width, row_height, "Subtotal:", 1, 0, "L")
+            pdf.cell(totals_right_col_width, row_height, f"{total_amount:.2f} MAD", 1, 1, "R")
+
+            # Calculate and display only selected taxes
+            fixed_total = 0
+            tva_percentage = 0
+            tva_tax = None
+            for entry in selected_taxes or []:
+                tax = entry['tax']
+                if tax['tax_type'] == 'fixed':
+                    mode = entry['mode']
+                    if mode == 'per stay':
+                        tax_total = num_stays * float(tax['amount'])
+                        label = f"{tax['name']} ({float(tax['amount']):.2f} MAD x {num_stays} stays)"
+                    elif mode == 'per night':
+                        tax_total = total_nights * float(tax['amount'])
+                        label = f"{tax['name']} ({float(tax['amount']):.2f} MAD x {total_nights} nights)"
+                    else:
+                        tax_total = 0
+                        label = tax['name']
+                    fixed_total += tax_total
+                    pdf.set_x(totals_x)
+                    pdf.cell(totals_left_col_width, row_height, label, 1, 0, "L")
+                    pdf.cell(totals_right_col_width, row_height, f"{tax_total:.2f} MAD", 1, 1, "R")
+                elif tax['tax_type'] == 'percentage':
+                    tva_percentage = float(tax['percentage']) / 100
+                    tva_tax = tax
+            # Apply percentage tax (e.g., TVA) if selected
+            tva_total = 0
+            if tva_tax:
+                tva_base = total_amount + fixed_total
+                tva_total = tva_base * tva_percentage
+                pdf.set_x(totals_x)
+                pdf.cell(totals_left_col_width, row_height, f"{tva_tax['name']} ({int(tva_tax['percentage'])}%)", 1, 0, "L")
+                pdf.cell(totals_right_col_width, row_height, f"{tva_total:.2f} MAD", 1, 1, "R")
+            grand_total = total_amount + fixed_total + tva_total
+            pdf.set_font('DejaVu', 'B', 11)
+            pdf.set_x(totals_x)
+            pdf.cell(totals_left_col_width, row_height, "Total Due:", 1, 0, "L")
+            pdf.cell(totals_right_col_width, row_height, f"{grand_total:.2f} MAD", 1, 1, "R")
+            pdf.ln(3)
+
+            # Add total due in words after totals table
+            pdf.set_font('DejaVu', '', 9)
+            total_words = num2words(grand_total, lang='en').capitalize()
+            pdf.multi_cell(0, 5, f"The total amount due The total amount due is {total_words} Moroccan dirhams.", 0, 1, "L")
 
             # ----------------------------------- F O O T E R -----------------------------------------
             pdf.set_font('DejaVu', '', 11)
