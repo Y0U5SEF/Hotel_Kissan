@@ -287,6 +287,16 @@ class CompanyChargesDialog(QDialog):
         tax_rates = get_tax_rates()
         tax_group = QGroupBox("Apply Taxes")
         tax_layout = QVBoxLayout()
+        
+        # Add language selector
+        lang_layout = QHBoxLayout()
+        lang_label = QLabel("Invoice Language:")
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["English", "French"])
+        lang_layout.addWidget(lang_label)
+        lang_layout.addWidget(self.lang_combo)
+        tax_layout.addLayout(lang_layout)
+        
         for tax in tax_rates:
             row_layout = QHBoxLayout()
             label = tax['name']
@@ -408,6 +418,60 @@ class CompanyChargesDialog(QDialog):
             # Create receipts directory if it doesn't exist
             os.makedirs(RECEIPTS_DIR, exist_ok=True)
             
+            # Get selected language and map to correct key
+            lang_map = {'English': 'en', 'French': 'fr'}
+            lang = lang_map[self.lang_combo.currentText()]
+            
+            # Language-specific strings
+            strings = {
+                'en': {
+                    'invoice': "INVOICE",
+                    'invoice_details': "Invoice Details:",
+                    'billed_to': "Billed To:",
+                    'invoice_number': "Invoice Number:",
+                    'invoice_date': "Invoice Date:",
+                    'due_date': "Due Date:",
+                    'company': "Company:",
+                    'address': "Address:",
+                    'tax_id': "Tax ID:",
+                    'stay_details': "Stay Details:",
+                    'guest_name': "Guest Name",
+                    'check_in': "Check-in",
+                    'check_out': "Check-out",
+                    'nights': "Nights",
+                    'room_no': "Room N°",
+                    'rate': "Rate (MAD)",
+                    'total': "Total (MAD)",
+                    'subtotal': "Subtotal",
+                    'total_due': "Total Due",
+                    'total_in_words': "The total amount due is {} Moroccan dirhams.",
+                    'thank_you': "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business."
+                },
+                'fr': {
+                    'invoice': "FACTURE",
+                    'invoice_details': "Détails de la facture:",
+                    'billed_to': "Facturé à:",
+                    'invoice_number': "Numéro de facture:",
+                    'invoice_date': "Date de facture:",
+                    'due_date': "Date d'échéance:",
+                    'company': "Société:",
+                    'address': "Adresse:",
+                    'tax_id': "ID Fiscal:",
+                    'stay_details': "Détails du séjour:",
+                    'guest_name': "Nom du client",
+                    'check_in': "Arrivée",
+                    'check_out': "Départ",
+                    'nights': "Nuits",
+                    'room_no': "Chambre N°",
+                    'rate': "Tarif (MAD)",
+                    'total': "Total (MAD)",
+                    'subtotal': "Sous-total",
+                    'total_due': "Total dû",
+                    'total_in_words': "Le montant total dû est de {} dirhams marocains.",
+                    'thank_you': "Merci d'avoir choisi HOTEL KISSAN AGDZ. Nous apprécions votre confiance."
+                }
+            }
+            
             # Create a PDF object with UTF-8 support
             pdf = FPDF(orientation='P', unit='mm', format='A4')
             pdf.add_page()
@@ -469,7 +533,7 @@ class CompanyChargesDialog(QDialog):
 
             # --- Title "INVOICE" ---
             pdf.set_font('DejaVu', 'B', 24)
-            pdf.cell(0, 15, "INVOICE", 0, 1, "C")
+            pdf.cell(0, 15, strings[lang]['invoice'], 0, 1, "C")
             pdf.ln(3)
 
             # --- Two Columns: Invoice Details (Left) and Billed To (Right) ---
@@ -478,35 +542,35 @@ class CompanyChargesDialog(QDialog):
             pdf.set_font('DejaVu', 'B', 12)
 
             pdf.set_fill_color(200, 220, 255)
-            pdf.cell(col_width, 5, "Invoice Details:", 0, 0, "L", 1)
+            pdf.cell(col_width, 5, strings[lang]['invoice_details'], 0, 0, "L", 1)
             pdf.cell(gap_width, 5, "", 0, 0, "C")
-            pdf.cell(col_width, 5, "Billed To:", 0, 1, "L", 1)
+            pdf.cell(col_width, 5, strings[lang]['billed_to'], 0, 1, "L", 1)
             pdf.ln(1)
             
             pdf.set_font('DejaVu', '', 10)
             invoice_date = datetime.now().strftime('%d-%m-%Y')
             
             # Left Column: Invoice Number, Invoice Date
-            pdf.cell(col_width, 5, f"Invoice Number: INV-{company['id']}-{datetime.now().strftime('%Y%m%d')}", 0, 0, "L")
+            pdf.cell(col_width, 5, f"{strings[lang]['invoice_number']} INV-{company['id']}-{datetime.now().strftime('%Y%m%d')}", 0, 0, "L")
             pdf.cell(gap_width, 5, "", 0, 0, "C")
             # Right Column: Company Name
-            pdf.cell(col_width, 5, f"Company: {company['name']}", 0, 1, "L")
+            pdf.cell(col_width, 5, f"{strings[lang]['company']} {company['name']}", 0, 1, "L")
 
-            pdf.cell(col_width, 5, f"Invoice Date: {invoice_date}", 0, 0, "L")
+            pdf.cell(col_width, 5, f"{strings[lang]['invoice_date']} {invoice_date}", 0, 0, "L")
             pdf.cell(gap_width, 5, "", 0, 0, "C")
             # Right Column: Company Address
-            pdf.cell(col_width, 5, f"Address: {company.get('address', '')}", 0, 1, "L")
+            pdf.cell(col_width, 5, f"{strings[lang]['address']} {company.get('address', '')}", 0, 1, "L")
 
-            pdf.cell(col_width, 5, f"Due Date: {(datetime.now() + timedelta(days=company.get('payment_due_days', 30))).strftime('%d-%m-%Y')}", 0, 0, "L")
+            pdf.cell(col_width, 5, f"{strings[lang]['due_date']} {(datetime.now() + timedelta(days=company.get('payment_due_days', 30))).strftime('%d-%m-%Y')}", 0, 0, "L")
             pdf.cell(gap_width, 5, "", 0, 0, "C")
             # Right Column: Company Tax ID
-            pdf.cell(col_width, 5, f"Tax ID: {company.get('tax_id', '')}", 0, 1, "L")
+            pdf.cell(col_width, 5, f"{strings[lang]['tax_id']} {company.get('tax_id', '')}", 0, 1, "L")
             pdf.ln(1)
 
             # --- Stay Details Table ---
             pdf.set_font('DejaVu', 'B', 12)
             pdf.set_draw_color(105, 105, 105)
-            pdf.cell(0, 10, "Stay Details:", 0, 1, "L")
+            pdf.cell(0, 10, strings[lang]['stay_details'], 0, 1, "L")
             pdf.set_fill_color(200, 220, 255)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font('DejaVu', 'B', 8)  # Reduced font size for headers
@@ -523,16 +587,14 @@ class CompanyChargesDialog(QDialog):
 
             # Table headers
             pdf.cell(index_col_width, 6, "#", 1, 0, "C", 1)
-            pdf.cell(guest_col_width, 6, "Guest Name", 1, 0, "L", 1)
-            pdf.cell(checkin_col_width, 6, "Check-in", 1, 0, "C", 1)
-            pdf.cell(checkout_col_width, 6, "Check-out", 1, 0, "C", 1)
-            pdf.cell(nights_col_width, 6, "Nights", 1, 0, "C", 1)
-            pdf.cell(room_col_width, 6, "Room N°", 1, 0, "C", 1)
-            pdf.cell(rate_col_width, 6, "Rate (MAD)", 1, 0, "R", 1)
-            pdf.cell(total_col_width, 6, "Total (MAD)", 1, 1, "R", 1)
+            pdf.cell(guest_col_width, 6, strings[lang]['guest_name'], 1, 0, "L", 1)
+            pdf.cell(checkin_col_width, 6, strings[lang]['check_in'], 1, 0, "C", 1)
+            pdf.cell(checkout_col_width, 6, strings[lang]['check_out'], 1, 0, "C", 1)
+            pdf.cell(nights_col_width, 6, strings[lang]['nights'], 1, 0, "C", 1)
+            pdf.cell(room_col_width, 6, strings[lang]['room_no'], 1, 0, "C", 1)
+            pdf.cell(rate_col_width, 6, strings[lang]['rate'], 1, 0, "R", 1)
+            pdf.cell(total_col_width, 6, strings[lang]['total'], 1, 1, "R", 1)
 
-              # Reduced font size for table content
-            
             # Sort charges by check-in date (most recent first)
             sorted_charges = sorted(charges, key=lambda x: datetime.strptime(x['arrival_date'], '%Y-%m-%d'), reverse=True)
             
@@ -552,7 +614,6 @@ class CompanyChargesDialog(QDialog):
                 room_number = charge.get('room_number', '-')
                 if room_number != '-' and str(room_number).isdigit():
                     room_number = f"{int(room_number):02d}"
-                # else leave as is (e.g., 'Suite 3')
                 
                 # body rows height
                 row_height = 7
@@ -581,7 +642,6 @@ class CompanyChargesDialog(QDialog):
                     fill_color = '#ffffff' if row_index % 2 == 0 else '#f8f9f9'
                     pdf.set_fill_color(255, 255, 255) if fill_color == '#ffffff' else pdf.set_fill_color(229, 231, 233)
 
-                    
                     pdf.cell(index_col_width, 8, str(row_index), 1, 0, "C", 1)
                     pdf.cell(guest_col_width, 8, f"{charge['first_name']} {charge['last_name']}", 1, 0, "L", 1)
                     pdf.cell(checkin_col_width, 8, datetime.strptime(charge['arrival_date'], "%Y-%m-%d").strftime("%d-%m-%Y"), 1, 0, "L", 1)
@@ -596,15 +656,6 @@ class CompanyChargesDialog(QDialog):
 
             pdf.ln(2)
 
-            # index_col_width = page_width * 0.05      # 5%
-            # guest_col_width = page_width * 0.32      # 31%
-            # checkin_col_width = page_width * 0.12    # 12%
-            # checkout_col_width = page_width * 0.12   # 12%
-            # nights_col_width = page_width * 0.08     # 10%
-            # room_col_width = page_width * 0.08       # 10%
-            # rate_col_width = page_width * 0.11       # 10%
-            # total_col_width = page_width * 0.12      # 12%
-
             # --- Totals (Right Aligned) ---
             num_stays = len(sorted_charges)
             total_nights = sum((datetime.strptime(charge['departure_date'], '%Y-%m-%d') - datetime.strptime(charge['arrival_date'], '%Y-%m-%d')).days for charge in sorted_charges)
@@ -614,7 +665,7 @@ class CompanyChargesDialog(QDialog):
             pdf.set_font('DejaVu', '', 9)
             
             pdf.set_x(totals_x)
-            pdf.cell(totals_left_col_width, row_height, "Subtotal", 1, 0, "L")
+            pdf.cell(totals_left_col_width, row_height, strings[lang]['subtotal'], 1, 0, "L")
             pdf.cell(totals_right_col_width, row_height, f"{total_amount:.2f} MAD", 1, 1, "R")
 
             # Calculate and display only selected taxes
@@ -652,14 +703,14 @@ class CompanyChargesDialog(QDialog):
             grand_total = total_amount + fixed_total + tva_total
             pdf.set_font('DejaVu', 'B', 11)
             pdf.set_x(totals_x)
-            pdf.cell(totals_left_col_width, row_height, "Total Due", 1, 0, "L")
+            pdf.cell(totals_left_col_width, row_height, strings[lang]['total_due'], 1, 0, "L")
             pdf.cell(totals_right_col_width, row_height, f"{grand_total:.2f} MAD", 1, 1, "R")
             pdf.ln(3)
 
             # Add total due in words after totals table
             pdf.set_font('DejaVu', '', 10)
-            total_words = num2words(grand_total, lang='fr').capitalize()
-            pdf.multi_cell(0, 5, f"The total amount due is {total_words} Moroccan dirhams.", 0, 1, "L")
+            total_words = num2words(grand_total, lang='fr' if lang == 'fr' else 'en').capitalize()
+            pdf.multi_cell(0, 5, strings[lang]['total_in_words'].format(total_words), 0, 1, "L")
 
             # ----------------------------------- F O O T E R -----------------------------------------
             pdf.set_font('DejaVu', '', 10)
@@ -714,13 +765,9 @@ class CompanyChargesDialog(QDialog):
             pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
             pdf.ln(1) # Add a small line break after the line for spacing
 
-            # Redefine footer_text to only contain the thank you message
+            # Add thank you message
             pdf.set_font('DejaVu', '', 10)
-            footer_text = "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business."
-            pdf.multi_cell(0, 5, footer_text, 0, "C")
-            
-
-
+            pdf.multi_cell(0, 5, strings[lang]['thank_you'], 0, "C")
 
             # Save the PDF
             output_pdf_file = os.path.join(RECEIPTS_DIR, f"company_invoice_{company['id']}_{datetime.now().strftime('%Y%m%d')}.pdf")
