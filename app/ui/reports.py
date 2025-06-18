@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QDateEdit, QComboBox, QFileDialog,
-    QFormLayout, QFrame, QStackedWidget
+    QFormLayout, QFrame, QStackedWidget, QMessageBox
 , QHeaderView)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QIcon
@@ -163,128 +163,177 @@ class ReportsWidget(QWidget):
         layout.addWidget(self.stacked_tables)
 
     def load_report_data(self):
-        from_date = self.date_from.date().toString("yyyy-MM-dd")
-        to_date = self.date_to.date().toString("yyyy-MM-dd")
-        room_type = self.room_type_filter.currentText()
-        status = self.status_filter.currentText()
-        report_type = self.report_type.currentText()
+        try:
+            # Show loading cursor
+            self.setCursor(Qt.CursorShape.WaitCursor)
+            
+            # Get filter values
+            from_date = self.date_from.date().toString("yyyy-MM-dd")
+            to_date = self.date_to.date().toString("yyyy-MM-dd")
+            room_type = self.room_type_filter.currentText()
+            status = self.status_filter.currentText()
+            report_type = self.report_type.currentText()
 
-        if report_type == "Reservations":
-            self.status_filter.clear()
-            self.status_filter.addItems(["All", "Confirmed", "Pending", "Cancelled"])
-            self.status_filter.setEnabled(True)
-            self.stacked_tables.setCurrentWidget(self.reservations_table)
-            self.reservations_table.setRowCount(0)
-            reservations = get_filtered_reservations(from_date, to_date, room_type, status)
-            for record in reservations:
-                row = self.reservations_table.rowCount()
-                self.reservations_table.insertRow(row)
-                self.reservations_table.setItem(row, 0, QTableWidgetItem(record.get("reservation_id", "")))
-                self.reservations_table.setItem(row, 1, QTableWidgetItem(f"{record.get('guest_first_name', '')} {record.get('guest_last_name', '')}"))
-                self.reservations_table.setItem(row, 2, QTableWidgetItem(record.get("room_type", "")))
-                self.reservations_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
-                self.reservations_table.setItem(row, 4, QTableWidgetItem(str(record.get("num_guests", ""))))
-                self.reservations_table.setItem(row, 5, QTableWidgetItem(str(record.get("deposit_amount", ""))))
-                self.reservations_table.setItem(row, 6, QTableWidgetItem(record.get("status", "")))
-                self.reservations_table.setItem(row, 7, QTableWidgetItem(record.get("created_on", "")))
+            # Validate date range
+            if self.date_from.date() > self.date_to.date():
+                QMessageBox.warning(self, "Invalid Date Range", "From date cannot be after To date")
+                return
 
-        elif report_type == "Check-ins":
-            self.status_filter.clear()
-            self.status_filter.addItems(["All", "Checked-in", "Cancelled"])
-            self.status_filter.setEnabled(True)
-            self.stacked_tables.setCurrentWidget(self.checkins_table)
-            self.checkins_table.setRowCount(0)
-            checkins = get_filtered_checkins(from_date, to_date, room_type, status="checked_in")
-            for record in checkins:
-                row = self.checkins_table.rowCount()
-                self.checkins_table.insertRow(row)
-                self.checkins_table.setItem(row, 0, QTableWidgetItem(record.get("checkin_id", "")))
-                self.checkins_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
-                self.checkins_table.setItem(row, 2, QTableWidgetItem(record.get("id_number", "")))
-                self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("room_number", "")))
-                self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("arrival_date", "")))
-                self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("departure_date", "")))
-                self.checkins_table.setItem(row, 6, QTableWidgetItem(record.get("status", "")))
+            # Clear current table
+            current_table = self.stacked_tables.currentWidget()
+            current_table.setRowCount(0)
 
-        elif report_type == "Check-outs":
-            self.status_filter.clear()
-            self.status_filter.setEnabled(False)
-            self.stacked_tables.setCurrentWidget(self.checkins_table)
-            self.checkins_table.setRowCount(0)
-            checkouts = get_filtered_checkins(from_date, to_date, room_type, status="checked_out")
-            for record in checkouts:
-                row = self.checkins_table.rowCount()
-                self.checkins_table.insertRow(row)
-                self.checkins_table.setItem(row, 0, QTableWidgetItem(record.get("checkin_id", "")))
-                self.checkins_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
-                self.checkins_table.setItem(row, 2, QTableWidgetItem(record.get("room_number", "")))
-                self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
-                self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
-                self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("status", "")))
+            if report_type == "Reservations":
+                self.status_filter.clear()
+                self.status_filter.addItems(["All", "Confirmed", "Pending", "Cancelled"])
+                self.status_filter.setEnabled(True)
+                self.stacked_tables.setCurrentWidget(self.reservations_table)
+                
+                try:
+                    reservations = get_filtered_reservations(from_date, to_date, room_type, status)
+                    for record in reservations:
+                        row = self.reservations_table.rowCount()
+                        self.reservations_table.insertRow(row)
+                        self.reservations_table.setItem(row, 0, QTableWidgetItem(str(record.get("reservation_id", ""))))
+                        self.reservations_table.setItem(row, 1, QTableWidgetItem(f"{record.get('guest_first_name', '')} {record.get('guest_last_name', '')}"))
+                        self.reservations_table.setItem(row, 2, QTableWidgetItem(record.get("room_type", "")))
+                        self.reservations_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
+                        self.reservations_table.setItem(row, 4, QTableWidgetItem(str(record.get("num_guests", 0))))
+                        self.reservations_table.setItem(row, 5, QTableWidgetItem(f"${record.get('deposit_amount', 0):.2f}"))
+                        self.reservations_table.setItem(row, 6, QTableWidgetItem(record.get("status", "")))
+                        self.reservations_table.setItem(row, 7, QTableWidgetItem(record.get("created_on", "")))
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to load reservations: {str(e)}")
 
-        elif report_type == "Guests":
-            self.status_filter.clear()
-            self.status_filter.setEnabled(False)
-            self.stacked_tables.setCurrentWidget(self.guests_table)
-            self.guests_table.setRowCount(0)
-            guests = get_all_guests()
-            for guest in guests:
-                row = self.guests_table.rowCount()
-                self.guests_table.insertRow(row)
-                self.guests_table.setItem(row, 0, QTableWidgetItem(str(guest.get("id", ""))))
-                self.guests_table.setItem(row, 1, QTableWidgetItem(f"{guest.get('first_name', '')} {guest.get('last_name', '')}"))
-                self.guests_table.setItem(row, 2, QTableWidgetItem(guest.get("id_type", "")))
-                self.guests_table.setItem(row, 3, QTableWidgetItem(guest.get("id_number", "")))
-                self.guests_table.setItem(row, 4, QTableWidgetItem(f"{guest.get('phone_code', '')} {guest.get('phone_number', '')}"))
-                self.guests_table.setItem(row, 5, QTableWidgetItem(guest.get("email", "")))
-                self.guests_table.setItem(row, 6, QTableWidgetItem(guest.get("nationality", "")))
-                self.guests_table.setItem(row, 7, QTableWidgetItem(guest.get("vip_status", "")))
+            elif report_type == "Check-ins":
+                self.status_filter.clear()
+                self.status_filter.addItems(["All", "Checked-in", "Cancelled"])
+                self.status_filter.setEnabled(True)
+                self.stacked_tables.setCurrentWidget(self.checkins_table)
+                
+                try:
+                    checkins = get_filtered_checkins(from_date, to_date, room_type, status)
+                    for record in checkins:
+                        row = self.checkins_table.rowCount()
+                        self.checkins_table.insertRow(row)
+                        self.checkins_table.setItem(row, 0, QTableWidgetItem(str(record.get("checkin_id", ""))))
+                        self.checkins_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
+                        self.checkins_table.setItem(row, 2, QTableWidgetItem(record.get("id_number", "")))
+                        self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("room_number", "")))
+                        self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("arrival_date", "")))
+                        self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("departure_date", "")))
+                        self.checkins_table.setItem(row, 6, QTableWidgetItem(record.get("status", "")))
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to load check-ins: {str(e)}")
 
-        elif report_type == "Revenue":
-            self.status_filter.clear()
-            self.status_filter.setEnabled(False)
-            self.stacked_tables.setCurrentWidget(self.revenue_table)
-            self.revenue_table.setRowCount(0)
-            checkins = get_filtered_checkins(from_date, to_date, room_type)
-            for record in checkins:
-                row = self.revenue_table.rowCount()
-                self.revenue_table.insertRow(row)
-                self.revenue_table.setItem(row, 0, QTableWidgetItem(record.get("checkin_id", "")))
-                self.revenue_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
-                self.revenue_table.setItem(row, 2, QTableWidgetItem(record.get("room_type", "")))
-                self.revenue_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
-                self.revenue_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
-                self.revenue_table.setItem(row, 5, QTableWidgetItem(str(record.get("total_paid", "0.00"))))
-                # Get services revenue
-                services = get_booking_services(record.get("id"))
-                services_revenue = sum(service.get("total_charge", 0) for service in services)
-                self.revenue_table.setItem(row, 6, QTableWidgetItem(str(services_revenue)))
+            elif report_type == "Check-outs":
+                self.status_filter.clear()
+                self.status_filter.setEnabled(False)
+                self.stacked_tables.setCurrentWidget(self.checkins_table)
+                
+                try:
+                    checkouts = get_filtered_checkins(from_date, to_date, room_type, status="checked_out")
+                    for record in checkouts:
+                        row = self.checkins_table.rowCount()
+                        self.checkins_table.insertRow(row)
+                        self.checkins_table.setItem(row, 0, QTableWidgetItem(str(record.get("checkin_id", ""))))
+                        self.checkins_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
+                        self.checkins_table.setItem(row, 2, QTableWidgetItem(record.get("id_number", "")))
+                        self.checkins_table.setItem(row, 3, QTableWidgetItem(record.get("room_number", "")))
+                        self.checkins_table.setItem(row, 4, QTableWidgetItem(record.get("arrival_date", "")))
+                        self.checkins_table.setItem(row, 5, QTableWidgetItem(record.get("departure_date", "")))
+                        self.checkins_table.setItem(row, 6, QTableWidgetItem(record.get("status", "")))
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to load check-outs: {str(e)}")
 
-        elif report_type == "Services":
-            self.status_filter.clear()
-            self.status_filter.setEnabled(False)
-            self.stacked_tables.setCurrentWidget(self.services_table)
-            self.services_table.setRowCount(0)
-            services = get_services()
-            for service in services:
-                row = self.services_table.rowCount()
-                self.services_table.insertRow(row)
-                self.services_table.setItem(row, 0, QTableWidgetItem(str(service.get("id", ""))))
-                self.services_table.setItem(row, 1, QTableWidgetItem(service.get("name", "")))
-                self.services_table.setItem(row, 2, QTableWidgetItem(str(service.get("default_price", "0.00"))))
-                self.services_table.setItem(row, 3, QTableWidgetItem(service.get("unit", "")))
-                # Calculate total usage and revenue
-                total_usage = 0
-                total_revenue = 0
-                checkins = get_filtered_checkins(from_date, to_date)
-                for checkin in checkins:
-                    booking_services = get_booking_services(checkin.get("id"))
-                    for booking_service in booking_services:
-                        if booking_service.get("service_id") == service.get("id"):
-                            total_usage += booking_service.get("quantity", 0)
-                            total_revenue += booking_service.get("total_charge", 0)
-                self.services_table.setItem(row, 4, QTableWidgetItem(str(total_usage)))
-                self.services_table.setItem(row, 5, QTableWidgetItem(str(total_revenue)))
+            elif report_type == "Guests":
+                self.status_filter.clear()
+                self.status_filter.setEnabled(False)
+                self.stacked_tables.setCurrentWidget(self.guests_table)
+                
+                try:
+                    guests = get_all_guests()
+                    for guest in guests:
+                        row = self.guests_table.rowCount()
+                        self.guests_table.insertRow(row)
+                        self.guests_table.setItem(row, 0, QTableWidgetItem(str(guest.get("id", ""))))
+                        self.guests_table.setItem(row, 1, QTableWidgetItem(f"{guest.get('first_name', '')} {guest.get('last_name', '')}"))
+                        self.guests_table.setItem(row, 2, QTableWidgetItem(guest.get("id_type", "")))
+                        self.guests_table.setItem(row, 3, QTableWidgetItem(guest.get("id_number", "")))
+                        self.guests_table.setItem(row, 4, QTableWidgetItem(f"{guest.get('phone_code', '')} {guest.get('phone_number', '')}"))
+                        self.guests_table.setItem(row, 5, QTableWidgetItem(guest.get("email", "")))
+                        self.guests_table.setItem(row, 6, QTableWidgetItem(guest.get("nationality", "")))
+                        self.guests_table.setItem(row, 7, QTableWidgetItem(guest.get("vip_status", "")))
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to load guests: {str(e)}")
+
+            elif report_type == "Revenue":
+                self.status_filter.clear()
+                self.status_filter.setEnabled(False)
+                self.stacked_tables.setCurrentWidget(self.revenue_table)
+                
+                try:
+                    checkins = get_filtered_checkins(from_date, to_date, room_type)
+                    for record in checkins:
+                        row = self.revenue_table.rowCount()
+                        self.revenue_table.insertRow(row)
+                        self.revenue_table.setItem(row, 0, QTableWidgetItem(str(record.get("checkin_id", ""))))
+                        self.revenue_table.setItem(row, 1, QTableWidgetItem(record.get("guest_name", "")))
+                        self.revenue_table.setItem(row, 2, QTableWidgetItem(record.get("room_type", "")))
+                        self.revenue_table.setItem(row, 3, QTableWidgetItem(record.get("arrival_date", "")))
+                        self.revenue_table.setItem(row, 4, QTableWidgetItem(record.get("departure_date", "")))
+                        self.revenue_table.setItem(row, 5, QTableWidgetItem(f"${record.get('total_paid', 0):.2f}"))
+                        
+                        # Get services revenue
+                        try:
+                            services = get_booking_services(record.get("checkin_id"))
+                            services_revenue = sum(service.get("total_charge", 0) for service in services)
+                            self.revenue_table.setItem(row, 6, QTableWidgetItem(f"${services_revenue:.2f}"))
+                        except Exception as e:
+                            self.revenue_table.setItem(row, 6, QTableWidgetItem("$0.00"))
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to load revenue data: {str(e)}")
+
+            elif report_type == "Services":
+                self.status_filter.clear()
+                self.status_filter.setEnabled(False)
+                self.stacked_tables.setCurrentWidget(self.services_table)
+                
+                try:
+                    services = get_services()
+                    for service in services:
+                        row = self.services_table.rowCount()
+                        self.services_table.insertRow(row)
+                        self.services_table.setItem(row, 0, QTableWidgetItem(str(service.get("id", ""))))
+                        self.services_table.setItem(row, 1, QTableWidgetItem(service.get("name", "")))
+                        self.services_table.setItem(row, 2, QTableWidgetItem(f"${service.get('default_price', 0):.2f}"))
+                        self.services_table.setItem(row, 3, QTableWidgetItem(service.get("unit", "")))
+                        
+                        # Calculate total usage and revenue
+                        try:
+                            total_usage = 0
+                            total_revenue = 0
+                            checkins = get_filtered_checkins(from_date, to_date)
+                            for checkin in checkins:
+                                booking_services = get_booking_services(checkin.get("checkin_id"))
+                                for booking_service in booking_services:
+                                    if booking_service.get("service_id") == service.get("id"):
+                                        total_usage += booking_service.get("quantity", 0)
+                                        total_revenue += booking_service.get("total_charge", 0)
+                            
+                            self.services_table.setItem(row, 4, QTableWidgetItem(str(total_usage)))
+                            self.services_table.setItem(row, 5, QTableWidgetItem(f"${total_revenue:.2f}"))
+                        except Exception as e:
+                            self.services_table.setItem(row, 4, QTableWidgetItem("0"))
+                            self.services_table.setItem(row, 5, QTableWidgetItem("$0.00"))
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to load services data: {str(e)}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {str(e)}")
+        finally:
+            # Reset cursor
+            self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def export_pdf(self):
         report_type = self.report_type.currentText().replace(" ", "_").lower()

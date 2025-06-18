@@ -296,6 +296,7 @@ class CompanyChargesDialog(QDialog):
         lang_layout = QHBoxLayout()
         lang_label = QLabel("Invoice Language:")
         self.lang_combo = QComboBox()
+        # self.lang_combo.addItems(["English", "French", "العربية"])
         self.lang_combo.addItems(["English", "French"])
         lang_layout.addWidget(lang_label)
         lang_layout.addWidget(self.lang_combo)
@@ -416,12 +417,13 @@ class CompanyChargesDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to generate invoice: {str(e)}")
 
     def generate_company_invoice(self, company, charges, selected_taxes=None):
-        def format_number_with_spaces(number):
-            """Formats a number with a space as a thousand separator and two decimal places."""
-            return f"{number:,.2f}".replace(",", " ")
-
         def write_row(pdf, cells, widths, alignments, lang, is_header=False, row_height=10):
-            """Write a table row with support for header/data styles."""
+            """Write a table row with support for header/data styles and RTL reversal."""
+            if lang == 'ar':
+                cells = cells[::-1]
+                widths = widths[::-1]
+                alignments = alignments[::-1]
+
             for cell, width, align in zip(cells, widths, alignments):
                 if is_header:
                     pdf.set_font('segoeui', 'B', 9)
@@ -429,6 +431,7 @@ class CompanyChargesDialog(QDialog):
                     pdf.set_font('segoeui', '', 9)
                 pdf.cell(width, row_height, str(cell), 1, 0, align, 1)
             pdf.ln()
+
 
         """Generate company invoice using FPDF"""
         try:
@@ -461,7 +464,7 @@ class CompanyChargesDialog(QDialog):
                     'total': "Total (MAD)",
                     'subtotal': "Subtotal",
                     'total_due': "Total Due",
-                    'total_in_words': "This invoice has been finalized in the amount of",
+                    'total_in_words': "The total amount due is",
                     'thank_you': "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business."
                 },
                 'fr': {
@@ -484,10 +487,38 @@ class CompanyChargesDialog(QDialog):
                     'total': "Total (MAD)",
                     'subtotal': "Sous-total",
                     'total_due': "Total dû",
-                    'total_in_words': "Arrêté la présente facture à la somme de",
+                    'total_in_words': "Le montant total dû est de",
                     'thank_you': "Merci d'avoir choisi HOTEL KISSAN AGDZ. Nous apprécions votre confiance."
+                },
+                'ar': {
+                    'invoice': "فاتورة",
+                    'invoice_details': "تفاصيل الفاتورة:",
+                    'billed_to': "فاتورة إلى:",
+                    'invoice_number': "رقم الفاتورة:",
+                    'invoice_date': "تاريخ الفاتورة:",
+                    'due_date': "تاريخ الاستحقاق:",
+                    'company': "الشركة:",
+                    'address': "العنوان:",
+                    'tax_id': "الرقم الضريبي:",
+                    'stay_details': "تفاصيل الإقامة:",
+                    'guest_name': "اسم النزيل",
+                    'check_in': "تاريخ الوصول",
+                    'check_out': "تاريخ المغادرة",
+                    'nights': "الليالي",
+                    'room_no': "رقم الغرفة",
+                    'rate': "السعر (درهم)",
+                    'total': "المجموع (درهم)",
+                    'subtotal': "المجموع الفرعي",
+                    'total_due': "المبلغ المستحق",
+                    'total_in_words': "المبلغ المستحق هو",
+                    'thank_you': "شكراً لاختياركم فندق كيسان أگدز. نقدر ثقتكم بنا."
                 }
             }
+            
+            # Process Arabic text if needed
+            if lang == 'ar':
+                for key in strings['ar']:
+                    strings['ar'][key] = get_display(arabic_reshaper.reshape(strings['ar'][key]))
             
             # Create a PDF object with UTF-8 support
             pdf = FPDF(orientation='P', unit='mm', format='A4')
@@ -507,6 +538,7 @@ class CompanyChargesDialog(QDialog):
 
             pdf.add_font('segoeui', '', arial_font_path_regular, uni=True)
             pdf.add_font('segoeui', 'B', arial_font_path_bold, uni=True)
+
 
             page_width = pdf.w - 2 * pdf.l_margin
 
@@ -561,33 +593,78 @@ class CompanyChargesDialog(QDialog):
             pdf.set_font('segoeui', 'B', 12)
 
             pdf.set_fill_color(200, 220, 255)
-            pdf.cell(col_width, 8, strings[lang]['invoice_details'], 0, 0, "L", 1)
-            pdf.cell(gap_width, 5, "", 0, 0, "C")
-            pdf.cell(col_width, 8, strings[lang]['billed_to'], 0, 1, "L", 1)
+            if lang == "ar":
+                pdf.cell(col_width, 8, strings[lang]['billed_to'], 0, 0, "R", 1)
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                pdf.cell(col_width, 8, strings[lang]['invoice_details'], 0, 1, "R", 1)
+            else:
+                pdf.cell(col_width, 8, strings[lang]['invoice_details'], 0, 0, "L", 1)
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                pdf.cell(col_width, 8, strings[lang]['billed_to'], 0, 1, "L", 1)
             pdf.ln(1)
             
             pdf.set_font('segoeui', '', 10)
             invoice_date = datetime.now().strftime('%d-%m-%Y')
             
             # Left Column: Invoice Number, Invoice Date
-            pdf.cell(col_width, 5, f"{strings[lang]['invoice_number']} INV-{company['id']}-{datetime.now().strftime('%Y%m%d')}", 0, 0, "L")
-            pdf.cell(gap_width, 5, "", 0, 0, "C")
-            # Right Column: Company Name
-            pdf.cell(col_width, 5, f"{strings[lang]['company']} {company['name']}", 0, 1, "L")
+            if lang == "ar":
+                # Right Column: Company Name
+                pdf.cell(col_width, 5, f"{company['name']} {strings[lang]['company']}", 0, 0, "R")
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # Left Column: Invoice Number
+                pdf.cell(col_width, 5, f"INV-{company['id']}-{datetime.now().strftime('%Y%m%d')} {strings[lang]['invoice_number']}", 0, 1, "R")
 
-            pdf.cell(col_width, 5, f"{strings[lang]['invoice_date']} {invoice_date}", 0, 0, "L")
-            pdf.cell(gap_width, 5, "", 0, 0, "C")
-            # Right Column: Company tax id
-            pdf.cell(col_width, 5, f"{strings[lang]['tax_id']} {company.get('tax_id', '')}", 0, 1, "L")
+                # Right Column: Company Address
+                pdf.cell(col_width, 5, f"{company.get('address', '')} {strings[lang]['address']}", 0, 0, "R")
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # Left Column: Invoice Date
+                pdf.cell(col_width, 5, f"{invoice_date} {strings[lang]['invoice_date']}", 0, 1, "R")
 
+                # Right Column: Company Tax ID
+                pdf.cell(col_width, 5, f"{company.get('tax_id', '')} {strings[lang]['tax_id']}", 0, 0, "R")
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # Left Column: Due Date
+                pdf.cell(col_width, 5, f"{(datetime.now() + timedelta(days=company.get('payment_due_days', 30))).strftime('%d-%m-%Y')} {strings[lang]['due_date']}", 0, 1, "R")
+            else:
+                # pdf.cell(col_width, 5, f"{strings[lang]['invoice_number']} INV-{company['id']}-{datetime.now().strftime('%Y%m%d')}", 0, 0, "L")
+                # pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # # Right Column: Company Name
+                # pdf.cell(col_width, 5, f"{strings[lang]['company']} {company['name']}", 0, 1, "L")
+
+                # pdf.cell(col_width, 5, f"{strings[lang]['invoice_date']} {invoice_date}", 0, 0, "L")
+                # pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # # Right Column: Company Address
+                # pdf.cell(col_width, 5, f"{strings[lang]['address']} {company.get('address', '')}", 0, 1, "L")
+
+                # pdf.cell(col_width, 5, f"{strings[lang]['due_date']} {(datetime.now() + timedelta(days=company.get('payment_due_days', 30))).strftime('%d-%m-%Y')}", 0, 0, "L")
+                # pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # # Right Column: Company Tax ID
+                # pdf.cell(col_width, 5, f"{strings[lang]['tax_id']} {company.get('tax_id', '')}", 0, 1, "L")
+
+                pdf.cell(col_width, 5, f"{strings[lang]['invoice_number']} INV-{company['id']}-{datetime.now().strftime('%Y%m%d')}", 0, 0, "L")
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # Right Column: Company Name
+                pdf.cell(col_width, 5, f"{strings[lang]['company']} {company['name']}", 0, 1, "L")
+
+                pdf.cell(col_width, 5, f"{strings[lang]['invoice_date']} {invoice_date}", 0, 0, "L")
+                pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # Right Column: Company tax id
+                pdf.cell(col_width, 5, f"{strings[lang]['tax_id']} {company.get('tax_id', '')}", 0, 1, "L")
+
+                # pdf.cell(col_width, 5, f"{strings[lang]['due_date']} {(datetime.now() + timedelta(days=company.get('payment_due_days', 30))).strftime('%d-%m-%Y')}", 0, 0, "L")
+                # pdf.cell(gap_width, 5, "", 0, 0, "C")
+                # Right Column: Company Tax ID
+                
             pdf.ln(1)
 
             # --- Stay Details Table ---
             pdf.set_font('segoeui', 'B', 12)
             pdf.set_draw_color(200, 200, 200)
-            pdf.cell(0, 10, strings[lang]['stay_details'], 0, 1, "L")
+            pdf.cell(0, 10, strings[lang]['stay_details'], 0, 1, "R" if lang == "ar" else "L")
             pdf.set_fill_color(200, 220, 255)
             pdf.set_text_color(0, 0, 0)
+
+            
             
             # Calculate column widths
             index_col_width = page_width * 0.03      # 5%
@@ -609,7 +686,10 @@ class CompanyChargesDialog(QDialog):
                 nights_col_width, room_col_width, rate_col_width, total_col_width
             ]
 
-            alignments = ["C", "L", "C", "C", "C", "C", "R", "R"]
+            if lang == "ar":
+                alignments = ["C", "C", "C", "C", "C", "C", "C", "C"]
+            else:
+                alignments = ["C", "L", "C", "C", "C", "C", "R", "R"]
 
             write_row(pdf, headers, widths, alignments, lang, is_header=True)
 
@@ -635,22 +715,38 @@ class CompanyChargesDialog(QDialog):
                 pdf.set_fill_color(229, 231, 233) if fill_color == '#f8f9f9' else pdf.set_fill_color(255, 255, 255)
 
                 # Prepare row data
-                row_data = [
-                    f"{charge['first_name']} {charge['last_name']}",
-                    arrival.strftime('%d-%m-%Y'),
-                    departure.strftime('%d-%m-%Y'),
-                    str(nights),
-                    room_number,
-                    format_number_with_spaces(night_rate),
-                    format_number_with_spaces(float(charge.get('room_charges', 0) or 0))
-                ]
-                row = [row_index] + row_data
-                alignments = ["C", "L", "C", "C", "C", "C", "R", "R"]
+                # Define row content in correct order based on language
+                if lang == "ar":
+                    row_data = [
+                        f"{charge['first_name']} {charge['last_name']}",
+                        arrival.strftime('%d-%m-%Y'),
+                        departure.strftime('%d-%m-%Y'),
+                        str(nights),
+                        room_number,
+                        f"{night_rate:.2f}",
+                        f"{float(charge['room_charges']):.2f}",
+                    ]
+                    row = [row_index] + row_data  # index at the start for RTL
+                    alignments = ["C", "R", "C", "C", "C", "C", "L", "L"]
+                else:
+                    row_data = [
+                        f"{charge['first_name']} {charge['last_name']}",
+                        arrival.strftime('%d-%m-%Y'),
+                        departure.strftime('%d-%m-%Y'),
+                        str(nights),
+                        room_number,
+                        f"{night_rate:.2f}",
+                        f"{float(charge['room_charges']):.2f}",
+                    ]
+                    row = [row_index] + row_data  # index at the start for LTR
+                    alignments = ["C", "L", "C", "C", "C", "C", "R", "R"]
 
                 write_row(pdf, row, widths, alignments, lang, is_header=False, row_height=row_height)
 
                 total_amount += float(charge['room_charges'])
                 row_index += 1
+
+
 
             pdf.ln(2)
 
@@ -659,85 +755,201 @@ class CompanyChargesDialog(QDialog):
             total_nights = sum((datetime.strptime(charge['departure_date'], '%Y-%m-%d') - datetime.strptime(charge['arrival_date'], '%Y-%m-%d')).days for charge in sorted_charges)
             totals_left_col_width = checkin_col_width + checkout_col_width + nights_col_width + room_col_width
             totals_right_col_width = rate_col_width + total_col_width
-            totals_x = pdf.l_margin + index_col_width + guest_col_width
+            if lang == "ar":
+                totals_x = pdf.r_margin
+            else:
+                totals_x = pdf.l_margin + index_col_width + guest_col_width
             pdf.set_font('segoeui', '', 9)
 
-            pdf.set_x(totals_x)
-            pdf.cell(totals_left_col_width, row_height, strings[lang]['subtotal'], 1, 0, "L")
-            pdf.cell(totals_right_col_width, row_height, f"{format_number_with_spaces(total_amount)} MAD", 1, 1, "R")
-            # Calculate and display only selected taxes
-            fixed_total = 0
-            tva_percentage = 0
-            tva_tax = None
-            for entry in selected_taxes or []:
-                tax = entry['tax']
-                if tax['tax_type'] == 'fixed':
-                    mode = entry['mode']
-                    if mode == 'per stay':
-                        tax_total = num_stays * float(tax['amount'])
-                        label = f"{tax['name']} ({float(tax['amount']):.2f} MAD)"
-                    elif mode == 'per night':
-                        tax_total = total_nights * float(tax['amount'])
-                        label = f"{tax['name']} ({float(tax['amount']):.2f} MAD)"
-                    else:
-                        tax_total = 0
-                        label = tax['name']
-                    fixed_total += tax_total
-                    pdf.set_x(totals_x)
-                    pdf.cell(totals_left_col_width, row_height, label, 1, 0, "L")
-                    pdf.cell(totals_right_col_width, row_height, f"{format_number_with_spaces(tax_total)} MAD", 1, 1, "R")
-                elif tax['tax_type'] == 'percentage':
-                    tva_percentage = float(tax['percentage']) / 100
-                    tva_tax = tax
 
-            # Apply percentage tax (e.g., TVA) if selected
-            tva_total = 0
-            if tva_tax:
-                tva_base = total_amount + fixed_total
-                tva_total = tva_base * tva_percentage
+            
+            if lang == "ar":
                 pdf.set_x(totals_x)
-                pdf.cell(totals_left_col_width, row_height, f"{tva_tax['name']} ({int(tva_tax['percentage'])}%)", 1, 0, "L")
-                pdf.cell(totals_right_col_width, row_height, f"{format_number_with_spaces(tva_total)} MAD", 1, 1, "R")
+                pdf.cell(totals_right_col_width if lang == "ar" else totals_left_col_width, row_height, f"{total_amount:.2f} MAD", 1, 0, "L")
+                pdf.cell(totals_left_col_width if lang == "ar" else totals_right_col_width, row_height, strings[lang]['subtotal'], 1, 1, "R")
 
-            grand_total = total_amount + fixed_total + tva_total
-            formatted_grand_total = format_number_with_spaces(grand_total)
-            # formatted_grand_total = f"{grand_total:.2f}"
+                # Calculate and display only selected taxes
+                fixed_total = 0
+                tva_percentage = 0
+                tva_tax = None
+                for entry in selected_taxes or []:
+                    tax = entry['tax']
+                    if tax['tax_type'] == 'fixed':
+                        mode = entry['mode']
+                        if mode == 'per stay':
+                            tax_total = num_stays * float(tax['amount'])
+                            label = f"{tax['name']} ({float(tax['amount']):.2f} MAD x {num_stays} stays)"
+                        elif mode == 'per night':
+                            tax_total = total_nights * float(tax['amount'])
+                            label = f"{tax['name']} ({float(tax['amount']):.2f} MAD x {total_nights} nights)"
+                        else:
+                            tax_total = 0
+                            label = tax['name']
+                        fixed_total += tax_total
+                        pdf.set_x(totals_x)
+                        pdf.cell(totals_right_col_width, row_height, f"{tax_total:.2f} MAD", 1, 0, "L")
+                        pdf.cell(totals_left_col_width, row_height, label, 1, 1, "R")
+                    elif tax['tax_type'] == 'percentage':
+                        tva_percentage = float(tax['percentage']) / 100
+                        tva_tax = tax
 
-            pdf.set_font('segoeui', 'B', 11)
-            pdf.set_x(totals_x)
-            pdf.set_fill_color(229, 231, 233)
-            pdf.cell(totals_left_col_width, row_height, strings[lang]['total_due'], 1, 0, "L", 1)
-            pdf.cell(totals_right_col_width, row_height, f"{formatted_grand_total} MAD", 1, 1, "R", 1)
+                # Apply percentage tax (e.g., TVA) if selected
+                tva_total = 0
+                if tva_tax:
+                    tva_base = total_amount + fixed_total
+                    tva_total = tva_base * tva_percentage
+                    pdf.set_x(totals_x)
+                    pdf.cell(totals_right_col_width, row_height, f"{tva_total:.2f} MAD", 1, 0, "L")
+                    pdf.cell(totals_left_col_width, row_height, f"{tva_tax['name']} ({int(tva_tax['percentage'])}%)", 1, 1, "R")
+
+                grand_total = total_amount + fixed_total + tva_total
+                formatted_grand_total = f"{grand_total:.2f}"
+                pdf.set_font('segoeui', 'B', 11)
+                pdf.set_x(totals_x)
+                pdf.set_fill_color(229, 231, 233)
+                pdf.cell(totals_right_col_width, row_height, f"{formatted_grand_total} MAD", 1, 0, "L", 1)
+                pdf.cell(totals_left_col_width, row_height, strings[lang]['total_due'], 1, 1, "R", 1)
+
+            else:
+                pdf.set_x(totals_x)
+                pdf.cell(totals_left_col_width, row_height, strings[lang]['subtotal'], 1, 0, "L")
+                pdf.cell(totals_right_col_width, row_height, f"{total_amount:.2f} MAD", 1, 1, "R")
+
+                # Calculate and display only selected taxes
+                fixed_total = 0
+                tva_percentage = 0
+                tva_tax = None
+                for entry in selected_taxes or []:
+                    tax = entry['tax']
+                    if tax['tax_type'] == 'fixed':
+                        mode = entry['mode']
+                        if mode == 'per stay':
+                            tax_total = num_stays * float(tax['amount'])
+                            # label = f"{tax['name']} ({float(tax['amount']):.2f} MAD x {num_stays} stays)"
+                            label = f"{tax['name']} ({float(tax['amount']):.2f} MAD)"
+                        elif mode == 'per night':
+                            tax_total = total_nights * float(tax['amount'])
+                            # label = f"{tax['name']} ({float(tax['amount']):.2f} MAD x {total_nights} nights)"
+                            label = f"{tax['name']} ({float(tax['amount']):.2f} MAD)"
+                        else:
+                            tax_total = 0
+                            label = tax['name']
+                        fixed_total += tax_total
+                        pdf.set_x(totals_x)
+                        pdf.cell(totals_left_col_width, row_height, label, 1, 0, "L")
+                        pdf.cell(totals_right_col_width, row_height, f"{tax_total:.2f} MAD", 1, 1, "R")
+                    elif tax['tax_type'] == 'percentage':
+                        tva_percentage = float(tax['percentage']) / 100
+                        tva_tax = tax
+
+                # Apply percentage tax (e.g., TVA) if selected
+                tva_total = 0
+                if tva_tax:
+                    tva_base = total_amount + fixed_total
+                    tva_total = tva_base * tva_percentage
+                    pdf.set_x(totals_x)
+                    pdf.cell(totals_left_col_width, row_height, f"{tva_tax['name']} ({int(tva_tax['percentage'])}%)", 1, 0, "L")
+                    pdf.cell(totals_right_col_width, row_height, f"{tva_total:.2f} MAD", 1, 1, "R")
+
+                grand_total = total_amount + fixed_total + tva_total
+                formatted_grand_total = f"{grand_total:.2f}"
+                pdf.set_font('segoeui', 'B', 11)
+                pdf.set_x(totals_x)
+                pdf.set_fill_color(229, 231, 233)
+                pdf.cell(totals_left_col_width, row_height, strings[lang]['total_due'], 1, 0, "L", 1)
+                pdf.cell(totals_right_col_width, row_height, f"{formatted_grand_total} MAD", 1, 1, "R", 1)
             pdf.ln(3)
 
             # Add total due in words after totals table
             pdf.set_font('segoeui', 'B', 11)
+            # total_words = num2words(grand_total, lang='fr' if lang == 'fr' else 'en').capitalize()
             int_part, dec_part = formatted_grand_total.split('.')
 
-            # Remove spaces before passing to num2words
-            int_part_clean = int_part.replace(" ", "")
-            dec_part_clean = dec_part.replace(" ", "")
 
+            # Assuming lang is either 'en', 'fr', or 'ar'
             if lang == 'fr':
-                int_words = num2words(int_part_clean, lang="fr")
-                dec_words = num2words(dec_part_clean, lang="fr")
-                if int(dec_part_clean) == 0: # Use dec_part_clean here
+                int_words = num2words(int_part, lang="fr")
+                dec_words = num2words(dec_part, lang="fr")
+                if int(dec_part) == 0:
                     total_words = f"{int_words} dirhams"
                 else:
                     total_words = f"{int_words} dirhams," + " et ".lower() + f"{dec_words} centimes"
+            elif lang == 'ar':
+                int_words = num2words(int_part, lang="ar")
+                dec_words = num2words(dec_part, lang="ar")
+                if int(dec_part) == 0:
+                    raw_arabic = f"{int_words} درهم"
+                else:
+                    raw_arabic = f"{int_words} درهم، و {dec_words} سنتيم"
+                reshaped = arabic_reshaper.reshape(raw_arabic)
+                total_words = get_display(reshaped)
+                print(total_words)
             else:
-                int_words = num2words(int_part_clean, lang="en")
-                dec_words = num2words(dec_part_clean, lang="en")
-                if int(dec_part_clean) == 0: # Use dec_part_clean here
+                int_words = num2words(int_part, lang="en")
+                dec_words = num2words(dec_part, lang="en")
+                if int(dec_part) == 0:
                     total_words = f"{int_words} dirhams"
                 else:
                     total_words = f"{int_words} dirhams," + " and ".lower() + f"{dec_words} centimes"
+            
 
-            pdf.multi_cell(page_width, 5, f"{strings[lang]['total_in_words']} {total_words}.", 0, "L")
+            if lang == "ar":
+                pdf.multi_cell(page_width, 5, f".{total_words} {strings[lang]['total_in_words']}", 0, "R")
+            else:
+                pdf.multi_cell(page_width, 5, f"{strings[lang]['total_in_words']} {total_words}.", 0, "L")
+
 
             # ----------------------------------- F O O T E R -----------------------------------------
             pdf.set_font('segoeui', '', 11)
+            # --- Footer ---
+            # Calculate height of individual footer sections
+            # Each detail line (RIB, ICE, etc.) is 5mm high
+            # num_info_lines = 5  RIB, ICE, Patente, IF, R.C
+            # height_of_detail_lines = 5 * num_info_lines # 5 lines * 5mm height each = 25mm
+
+            # Space after the horizontal line, before the 'Thank you' message
+            # height_of_line_break_after_details = 6 # From pdf.ln(5) after the line
+
+            # The 'Thank you' message is a multi_cell with height 5mm per line.
+            # Assuming this specific text fits on one line, its height is 5mm.
+            # If the text were longer and wrapped, this would need more sophisticated calculation.
+            # height_of_thank_you_message = 5 # 1 line * 5mm height = 5mm
+
+            # Total calculated height for all footer content before positioning
+            # footer_content_height = height_of_detail_lines
+
+            # Position footer at bottom based on calculated height
+            # footer_start_y = pdf.h - pdf.b_margin - footer_content_height
+            # pdf.set_y(footer_start_y)
             
+            # info_cell_width = 75
+            # colon_width = 5 # Small fixed width for the colon cell
+
+            # Draw horizontal line
+            # pdf.set_draw_color(0, 0, 0)
+            # pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            # pdf.ln(1)
+            # Print RIB, ICE, Patente, IF, R.C lines
+            # pdf.cell(info_cell_width, 5, "Relevé d'Identité Bancaire (RIB)", 'B', 0, "L")
+            # pdf.cell(colon_width, 5, ":", 'B', 0, "L") # Fixed width for colon
+            # pdf.cell(0, 5, "101 566 2121114709320005 67  -  Banque Populaire", 'B', 1, "L") # Remaining width
+
+            # pdf.cell(info_cell_width, 5, "Identifiant Commun de l'Entreprise (ICE)", 'B', 0, "L")
+            # pdf.cell(colon_width, 5, ":", 'B', 0, "L")
+            # pdf.cell(0, 5, "001743O83000092", 'B', 1, "L")
+
+            # pdf.cell(info_cell_width, 5, "Patente", 'B', 0, "L")
+            # pdf.cell(colon_width, 5, ":", 'B', 0, "L")
+            # pdf.cell(0, 5, "457700803", 'B', 1, "L")
+
+            # pdf.cell(info_cell_width, 5, "Identifiant Fiscal (IF)", 'B', 0, "L")
+            # pdf.cell(colon_width, 5, ":", 'B', 0, "L")
+            # pdf.cell(0, 5, "6590375", 'B', 1, "L")
+
+            # pdf.cell(info_cell_width, 5, "Registre de Commerce (RC)", 0, 0, "L")
+            # pdf.cell(colon_width, 5, ":", 0, 0, "L")
+            # pdf.cell(0, 5, "12/58", 0, 1, "L")
+
             pdf.set_draw_color(0, 0, 0)
             pdf.set_y(pdf.h - pdf.b_margin - 34)
             pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
@@ -754,6 +966,11 @@ class CompanyChargesDialog(QDialog):
 
             pdf.set_font('segoeui', 'B', 9)
             pdf.multi_cell(0, 5, strings[lang]['thank_you'], 0, "C")
+
+
+            # Add thank you message
+            # pdf.set_font('segoeui', '', 10)
+            # pdf.multi_cell(0, 5, strings[lang]['thank_you'], 0, "C")
 
             # Save the PDF
             output_pdf_file = os.path.join(RECEIPTS_DIR, f"company_invoice_{company['id']}_{datetime.now().strftime('%Y%m%d')}.pdf")
