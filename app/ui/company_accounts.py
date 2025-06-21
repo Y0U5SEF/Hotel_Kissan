@@ -513,7 +513,8 @@ class CompanyChargesDialog(QDialog):
             # --- Hotel Information (Header) ---
             # Use Qt resource system for logo
             pdf.set_font('segoeui', '', 10)
-            logo_width = 25  # mm
+            logo_width = 50  # mm
+            logo_height = 50
             logo_path = ":/images/logo.png"
             qfile = QFile(logo_path)
             if qfile.open(QFile.OpenModeFlag.ReadOnly):

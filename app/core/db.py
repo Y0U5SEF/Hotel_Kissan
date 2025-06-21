@@ -147,7 +147,8 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS booking_services (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            booking_id INTEGER NOT NULL,
+            booking_id INTEGER,
+            guest_id INTEGER,
             service_id INTEGER NOT NULL,
             quantity INTEGER NOT NULL DEFAULT 1,
             unit_price_at_time_of_charge REAL NOT NULL,
@@ -155,6 +156,10 @@ def init_db():
             charge_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             charged_by_user_id INTEGER,
             notes TEXT,
+            is_paid INTEGER DEFAULT 0,
+            amount_paid REAL DEFAULT 0,
+            remaining_amount REAL DEFAULT 0,
+            payment_date TEXT,
             FOREIGN KEY (booking_id) REFERENCES check_ins (id),
             FOREIGN KEY (service_id) REFERENCES services (id),
             FOREIGN KEY (charged_by_user_id) REFERENCES users (id)
@@ -205,6 +210,31 @@ def init_db():
             notes TEXT,
             cancelled_by TEXT,
             FOREIGN KEY (reservation_id) REFERENCES reservations (reservation_id)
+        )
+    ''')
+    
+    # Create invoices table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_number TEXT NOT NULL UNIQUE,
+            date_generated TEXT NOT NULL,
+            due_date TEXT,
+            customer_name TEXT NOT NULL,
+            customer_email TEXT,
+            customer_phone TEXT,
+            billing_address TEXT,
+            tax_id TEXT,
+            items TEXT NOT NULL, -- JSON string of items
+            subtotal REAL NOT NULL,
+            tax_amount REAL NOT NULL,
+            total_amount REAL NOT NULL,
+            amount_paid REAL DEFAULT 0,
+            balance_due REAL NOT NULL,
+            payment_terms TEXT,
+            special_instructions TEXT,
+            pdf_path TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -578,20 +608,22 @@ def delete_tax_rate(tax_rate_id):
 
 # Booking Services CRUD
 def add_booking_service(booking_service):
-    """Add a new service charge to a booking"""
+    """Add a new service charge to a booking or guest"""
     conn = get_connection()
     c = conn.cursor()
     c.execute('''
         INSERT INTO booking_services (
-            booking_id, service_id, quantity, unit_price_at_time_of_charge,
-            total_charge, charged_by_user_id, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            booking_id, guest_id, service_id, quantity, unit_price_at_time_of_charge,
+            total_charge, charge_date, charged_by_user_id, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
-        booking_service['booking_id'],
+        booking_service.get('booking_id'),
+        booking_service.get('guest_id'),
         booking_service['service_id'],
         booking_service['quantity'],
         booking_service['unit_price_at_time_of_charge'],
         booking_service['total_charge'],
+        booking_service.get('charge_date'),
         booking_service.get('charged_by_user_id'),
         booking_service.get('notes')
     ))
@@ -1078,3 +1110,102 @@ def get_company_balance(company_id):
     result = c.fetchone()
     conn.close()
     return result[0] if result and result[0] is not None else 0
+
+def get_guest(guest_id):
+    """Get guest information by ID"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT * FROM guests WHERE id = ?
+    ''', (guest_id,))
+    guest = c.fetchone()
+    conn.close()
+    if guest:
+        return dict(zip([col[0] for col in c.description], guest))
+    return None
+
+def get_guest_services(guest_id):
+    """Get all service charges for a guest (not just by booking)"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT bs.*, s.name as service_name, s.unit
+        FROM booking_services bs
+        JOIN services s ON bs.service_id = s.id
+        WHERE bs.guest_id = ?
+        ORDER BY bs.charge_date DESC
+    ''', (guest_id,))
+    columns = [desc[0] for desc in c.description]
+    services = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return services
+
+def mark_guest_services_paid(guest_id, amount_paid, payment_date=None):
+    """Mark all unpaid services for a guest as paid or partly paid."""
+    conn = get_connection()
+    c = conn.cursor()
+    # Get total unpaid for guest
+    c.execute('''SELECT SUM(total_charge) FROM booking_services WHERE guest_id = ? AND is_paid = 0''', (guest_id,))
+    total_unpaid = c.fetchone()[0] or 0
+    remaining = total_unpaid - amount_paid
+    is_full = int(remaining <= 0.01)
+    if not payment_date:
+        from datetime import datetime
+        payment_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute('''
+        UPDATE booking_services
+        SET is_paid = ?, amount_paid = ?, remaining_amount = ?, payment_date = ?
+        WHERE guest_id = ? AND is_paid = 0
+    ''', (is_full, amount_paid, max(remaining, 0), payment_date, guest_id))
+    conn.commit()
+    conn.close()
+
+# Invoices CRUD
+
+def add_invoice(invoice):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO invoices (
+            invoice_number, date_generated, due_date, customer_name, customer_email, customer_phone, billing_address, tax_id, items, subtotal, tax_amount, total_amount, amount_paid, balance_due, payment_terms, special_instructions, pdf_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        invoice['invoice_number'],
+        invoice['date_generated'],
+        invoice.get('due_date'),
+        invoice['customer_name'],
+        invoice.get('customer_email'),
+        invoice.get('customer_phone'),
+        invoice.get('billing_address'),
+        invoice.get('tax_id'),
+        invoice['items'],
+        invoice['subtotal'],
+        invoice['tax_amount'],
+        invoice['total_amount'],
+        invoice.get('amount_paid', 0),
+        invoice['balance_due'],
+        invoice.get('payment_terms'),
+        invoice.get('special_instructions'),
+        invoice.get('pdf_path')
+    ))
+    conn.commit()
+    conn.close()
+
+def get_invoices():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM invoices ORDER BY date_generated DESC')
+    columns = [desc[0] for desc in c.description]
+    invoices = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return invoices
+
+def get_invoice(invoice_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM invoices WHERE id=?', (invoice_id,))
+    row = c.fetchone()
+    columns = [desc[0] for desc in c.description]
+    invoice = dict(zip(columns, row)) if row else None
+    conn.close()
+    return invoice

@@ -5,10 +5,11 @@
     
     <!-- Icons -->
     <file alias="icons/add_checkin.png">app/resources/icons/add_checkin.png</file>
+    <file alias="icons/bill.png">app/resources/icons/bill.png</file>
     <file alias="icons/arrivals.png">app/resources/icons/arrivals.png</file>
     <file alias="icons/available_rooms.png">app/resources/icons/available_rooms.png</file>
     <file alias="icons/booking.png">app/resources/icons/booking.png</file>
-    <file alias="icons/booking.png">app/resources/icons/company.png</file>
+    <file alias="icons/company.png">app/resources/icons/company.png</file>
     <file alias="icons/calendar_96px.png">app/resources/icons/calendar_96px.png</file>
     <file alias="icons/checkin.png">app/resources/icons/checkin.png</file>
     <file alias="icons/checkins-list.png">app/resources/icons/checkins-list.png</file>

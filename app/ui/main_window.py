@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QStatusBar, QStackedWidget,
     QFrame, QTableWidget, QTableWidgetItem, QDialog, QFormLayout,
-    QDialogButtonBox, QLineEdit, QDoubleSpinBox, QHeaderView, QComboBox, QMessageBox
+    QDialogButtonBox, QLineEdit, QDoubleSpinBox, QHeaderView, QComboBox, QMessageBox, QTabWidget
 )
 from PyQt6.QtGui import QIcon, QFont
 from PyQt6.QtCore import Qt, QSize
@@ -24,6 +24,8 @@ from PyQt6.QtCore import pyqtSignal
 from app.ui.reports import ReportsWidget
 from app.core.auth import UserAuthenticator
 from app.core.dev_config import DEV_MODE
+from app.ui.services_report_tab import ServicesReportTab
+from app.ui.widgets.invoices_widget import InvoicesWidget
 
 
 class MainWindow(QMainWindow):
@@ -185,16 +187,26 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.company_accounts_widget)
         self.create_nav_button("Company Accounts", ":/icons/company.png", 5)
         
+        # Invoices
+        self.invoices_widget = InvoicesWidget()
+        self.content_stack.addWidget(self.invoices_widget)
+        self.create_nav_button("Invoices", ":/icons/bill.png", 6)
+        
         # Services
-        self.services_widget = QWidget()
+        self.services_tab_widget = QTabWidget()
+        self.services_tab = QWidget()
+        self.report_tab = QWidget()
         self.setup_services_widget()
-        self.content_stack.addWidget(self.services_widget)
-        self.create_nav_button("Services", ":/icons/star.png", 6)
+        self.setup_report_tab()
+        self.services_tab_widget.addTab(self.services_tab, "Services")
+        self.services_tab_widget.addTab(self.report_tab, "Report")
+        self.content_stack.addWidget(self.services_tab_widget)
+        self.create_nav_button("Services", ":/icons/star.png", 7)
         
         # Reports
         reports_widget = ReportsWidget()
         self.content_stack.addWidget(reports_widget)
-        self.create_nav_button("Reports", ":/icons/reports.png", 7)
+        self.create_nav_button("Reports", ":/icons/reports.png", 8)
         
         # Add stretch to push settings button to bottom
         self.nav_layout.addStretch()
@@ -202,7 +214,7 @@ class MainWindow(QMainWindow):
         # Settings (at bottom)
         self.settings_widget = SettingsWidget()
         self.content_stack.addWidget(self.settings_widget)
-        self.create_nav_button("Settings", ":/icons/settings.png", 8)
+        self.create_nav_button("Settings", ":/icons/settings.png", 9)
         
     def create_nav_button(self, text, icon_path, index):
         button = QPushButton()
@@ -293,7 +305,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(MAIN_STYLESHEET)
 
     def setup_services_widget(self):
-        layout = QVBoxLayout(self.services_widget)
+        layout = QVBoxLayout(self.services_tab)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
@@ -304,7 +316,6 @@ class MainWindow(QMainWindow):
         self.services_table.setHorizontalHeaderLabels(["Service Name", "Default Price", "Unit", "Actions"])
         self.services_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.services_table.verticalHeader().setDefaultSectionSize(50)  # Make rows thick
-
 
         self.services_table.setObjectName("dataTable")
         layout.addWidget(self.services_table)
@@ -458,3 +469,11 @@ class MainWindow(QMainWindow):
         self.user_label.setText(full_name.upper())
         self.show()  # Show the main window again
         self.login_form = None  # Clear the reference to the login form
+
+    def setup_report_tab(self):
+        # Replace placeholder with the actual report tab widget
+        layout = QVBoxLayout(self.report_tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.services_report_tab = ServicesReportTab(self.report_tab)
+        layout.addWidget(self.services_report_tab)

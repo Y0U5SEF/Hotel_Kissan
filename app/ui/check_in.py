@@ -4,13 +4,13 @@ from PyQt6.QtWidgets import (
     QGridLayout, QMessageBox, QFrame, QSpinBox, QTextEdit, QProgressBar, QDialog, QDialogButtonBox, 
     QSizePolicy, QCheckBox, QScrollArea, QSpacerItem
 )
-from PyQt6.QtCore import Qt, QDate, QSize, pyqtSignal, QMutex, QStringListModel
+from PyQt6.QtCore import Qt, QDate, QSize, pyqtSignal, QMutex, QStringListModel, QFile
 from PyQt6.QtGui import QIcon, QPixmap, QFont, QColor, QPainter
 from app.core.db import (
     get_all_guests, get_all_rooms, update_room, get_guest_id_by_name,
     insert_checkin, get_all_checkins, update_checkin, get_booking_services,
     get_total_booking_charges, get_room_rates, get_tax_rates,
-    get_company_account, add_company_charge
+    get_company_account, add_company_charge, get_guest
 )
 from app.ui.dialogs.add_extra_charge import AddExtraChargeDialog
 import uuid
@@ -21,6 +21,7 @@ from fpdf import FPDF
 import logging
 from decimal import Decimal, InvalidOperation
 import traceback
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -976,7 +977,12 @@ class CheckInWidget(QWidget):
             return
         room_rate = Decimal(str(room_rate_value)) # Convert to Decimal
 
-        room_charges = Decimal(nights) * room_rate # Ensure nights is also Decimal or converted to Decimal for multiplication
+        # Check if guest was marked for company billing during check-in
+        guest_data = get_guest(checkin['guest_id'])
+        is_company_billing = guest_data and guest_data.get('company_id') and checkin.get('bill_to_company', False)
+        
+        # Set room charges to 0 if company billing, otherwise calculate normally
+        room_charges = Decimal('0') if is_company_billing else Decimal(nights) * room_rate
         self.checkout_room_charges.setText(f"MAD {room_charges:.2f}")
         
         # Load extra charges
@@ -1129,6 +1135,10 @@ class CheckInWidget(QWidget):
 
     def show_checkout_confirmation(self):
         """Show checkout confirmation details"""
+        # Check if guest was marked for company billing during check-in
+        guest_data = get_guest(self.current_checkout['guest_id'])
+        is_company_billing = guest_data and guest_data.get('company_id') and self.current_checkout.get('bill_to_company', False)
+        
         message = f"""
         <div style='font-size:15px;'>
         <b style='font-size:18px;color:#27ae60;'>Check-out Summary</b><br><br>
@@ -1143,8 +1153,13 @@ class CheckInWidget(QWidget):
         &nbsp;&nbsp;Amount Paid: MAD {float(self.checkout_amount_paid.text() or 0):.2f}<br>
         &nbsp;&nbsp;Amount Due: {self.checkout_amount_due.text()}<br>
         &nbsp;&nbsp;Payment Method: {self.checkout_payment_method.currentText()}<br>
-        </div>
         """
+        
+        if is_company_billing:
+            company = get_company_account(guest_data['company_id'])
+            message += f"<br><b>Billing:</b><br>&nbsp;&nbsp;Bill to Company: {company['name'] if company else 'Unknown Company'}<br>"
+        
+        message += "</div>"
         self.checkout_confirmation_label.setText(message)
 
     def print_receipt(self):
@@ -1791,31 +1806,39 @@ class CheckInWidget(QWidget):
                 self.filter_guest_dropdown() 
 
     def generate_checkout_receipt(self):
+        def format_number_with_spaces(number):
+            """Formats a number with a space as a thousand separator and two decimal places."""
+            return f"{number:,.2f}".replace(",", " ")
+        
         """Generate checkout receipt using FPDF with proper error handling and encoding support"""
         try:
             # Create receipts directory if it doesn't exist
             os.makedirs(RECEIPTS_DIR, exist_ok=True)
             
-            # Create a PDF object with UTF-8 support
-            # Use 'P' for portrait, 'mm' for millimeters, and 'A5' for page size
-            # Create a PDF object with UTF-8 support
+            # Generate unique filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"checkout_receipt_{self.current_checkout['checkin_id']}_{timestamp}.pdf"
+            pdf_path = os.path.join(RECEIPTS_DIR, filename)
+            
+            # Create PDF
             pdf = FPDF()
             pdf.add_page()
-            pdf.set_auto_page_break(auto=False, margin=5)
-            pdf.set_left_margin(10)
-            pdf.set_top_margin(10)
-            pdf.set_right_margin(10)
             
-            # Set font with UTF-8 support
-            # Use DejaVuSans.ttf for regular and DejaVuSans-Bold.ttf for bold
+            # Add segoeui font for proper text encoding
             font_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts')
-            font_path_regular = os.path.join(font_dir, 'DejaVuSans.ttf')
-            font_path_bold = os.path.join(font_dir, 'DejaVuSans-Bold.ttf')
-            pdf.add_font('DejaVu', '', font_path_regular, uni=True)
-            pdf.add_font('DejaVu', 'B', font_path_bold, uni=True)
-            pdf.set_font('DejaVu', '', 10)
-
-            # --- Hotel Information (Header) ---
+            pdf.add_font('segoeui', '', os.path.join(font_dir, 'segoeui.ttf'), uni=True)
+            pdf.add_font('segoeui', 'B', os.path.join(font_dir, 'segoeuib.ttf'), uni=True)
+            
+            # Set margins and page width
+            y_margin = 6
+            x_margin = 10
+            pdf.set_auto_page_break(auto=True, margin = y_margin)
+            pdf.set_left_margin(x_margin)
+            pdf.set_top_margin(y_margin)
+            pdf.set_right_margin(x_margin)
+            
+            
+            # --- Header ---
             # Logo (placeholder - replace with actual image path if available)
             # For now, using a placeholder image URL. In a real application, you'd use a local path.
             # You might need to adjust the x, y, width, height for your logo.
@@ -1826,103 +1849,145 @@ class CheckInWidget(QWidget):
             
             page_width = pdf.w - 2 * pdf.l_margin
             # Hotel Name, Address, Phone, Email (Left Aligned)
-            pdf.set_font('DejaVu', 'B', 16)
-            pdf.cell(page_width * 0.7, 10, "Hotel KISSAN Agdz", 0, 0, "L")
-            # Placeholder for logo (right aligned)
-            pdf.set_font('DejaVu', '', 10)
-            pdf.cell(page_width * 0.3, 10, "LOGO HERE", 0, 1, "R") # Placeholder for logo
+            # --- Hotel Information (Header) ---
+            # Use Qt resource system for logo
+            pdf.set_font('segoeui', '', 10)
+            logo_width = 50  # mm
+            logo_height = 50
+            logo_path = ":/images/logo.png"
+            qfile = QFile(logo_path)
+            if qfile.open(QFile.OpenModeFlag.ReadOnly):
+                data = qfile.readAll()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    tmp.write(data.data())
+                    tmp_path = tmp.name
+                x_logo = pdf.w - pdf.r_margin - logo_width
+                y_logo = y_margin
+                try:
+                    pdf.image(tmp_path, x=x_logo, y=y_logo, w=logo_width)
+                    pdf.ln(logo_width * 0.2)  # Adjust line spacing as needed
+                except Exception:
+                    pass  # If image fails, do nothing
             
-            pdf.set_font('DejaVu', '', 10)
+            pdf.set_font('segoeui', 'B', 16)
+            pdf.set_x(x_margin)
+            pdf.set_y(y_margin)
+            pdf.cell(page_width * 0.7, 10, "HOTEL KISSAN AGDZ", 0, 1, "L")
+            pdf.set_font('segoeui', '', 10)
             pdf.cell(0, 5, "Avenue Mohamed V, Agdz, Province of Zagora, Morocco", 0, 1, "L")
-            pdf.cell(0, 5, "Phone: +212 5 44 84 30 44", 0, 1, "L")
-            pdf.cell(0, 5, "Fax: +212 5 44 84 32 58", 0, 1, "L")
-            pdf.cell(0, 5, "Email: kissane@iam.net.ma", 0, 1, "L")
-            pdf.ln(5)
+
+            pdf.cell(18, 5, "Tél", 0, 0, "L")
+            pdf.cell(3, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "+212 5 44 84 30 44", 0, 1, "L")
+
+            pdf.cell(18, 5, "Fax", 0, 0, "L")
+            pdf.cell(3, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "+212 5 44 84 32 58", 0, 1, "L")
+
+            pdf.cell(18, 5, "Courriel", 0, 0, "L")
+            pdf.cell(3, 5, ":", 0, 0, "L")
+            pdf.cell(0, 5, "kissane@iam.net.ma", 0, 1, "L")
+
+            pdf.ln(2)
 
             # --- Title "INVOICE" ---
-            pdf.set_font('DejaVu', 'B', 24)
+            pdf.set_font('segoeui', 'B', 24)
             pdf.cell(0, 15, "INVOICE", 0, 1, "C")
-            pdf.ln(5)
+            pdf.ln(3)
 
             # --- Two Columns: Invoice Details (Left) and Billed To (Right) ---
             col_width = page_width / 2
-            pdf.set_font('DejaVu', 'B', 12)
+            pdf.set_font('segoeui', 'B', 12)
             pdf.cell(col_width, 5, "Invoice Details:", 0, 0, "L")
             pdf.cell(col_width, 5, "Billed To:", 0, 1, "L")
             
-            pdf.set_font('DejaVu', '', 10)
+            pdf.set_font('segoeui', '', 10)
             invoice_date = datetime.now().strftime('%d-%m-%Y') # Format as dd-mm-yyyy
             
             # Left Column: Invoice Number, Invoice Date
             pdf.cell(col_width, 4, f"Invoice Number: {self.current_checkout['checkin_id']}", 0, 0, "L")
             # Right Column: Client Name
-            pdf.cell(col_width, 4, f"Full Name: {self.checkout_guest_name.text()}", 0, 1, "L")
-
+            pdf.cell(col_width, 4, f"Guest: {self.checkout_guest_name.text()}", 0, 1, "L")
+            
             pdf.cell(col_width, 4, f"Invoice Date: {invoice_date}", 0, 0, "L")
-            # Right Column: Check-in Date
-            pdf.cell(col_width, 4, f"Check-in Date: {self.checkout_arrival.text()}", 0, 1, "L")
-
-            pdf.cell(col_width, 4, "", 0, 0, "L") # Empty cell for alignment
+            # Right Column: Room Number
+            pdf.cell(col_width, 4, f"Room: {self.checkout_room.text()}", 0, 1, "L")
+            
+            pdf.cell(col_width, 4, f"Check-in Date: {self.checkout_arrival.text()}", 0, 0, "L")
+            # Empty cell for alignment
             # Right Column: Check-out Date
             pdf.cell(col_width, 4, f"Check-out Date: {self.checkout_actual_departure.date().toString('yyyy-MM-dd')}", 0, 1, "L")
             pdf.ln(3)
 
             # --- Stay Details Table ---
-            pdf.set_font('DejaVu', 'B', 12)
-            pdf.cell(0, 10, "Stay Details:", 0, 1, "L")
-            pdf.set_fill_color(200, 220, 255)
-            pdf.set_text_color(0, 0, 0)
-            pdf.set_font('DejaVu', 'B', 10)
-            
-            # Calculate column widths for Stay Details table (occupy 100% width)
-            room_type_col_width = page_width * 0.4
-            nights_col_width = page_width * 0.2
-            rate_col_width = page_width * 0.2
-            total_col_width = page_width * 0.2
-
-            pdf.cell(room_type_col_width, 8, "Room Type", 1, 0, "L", 1)
-            pdf.cell(nights_col_width, 8, "Nights", 1, 0, "C", 1)
-            pdf.cell(rate_col_width, 8, "Rate (MAD)", 1, 0, "R", 1)
-            pdf.cell(total_col_width, 8, "Total (MAD)", 1, 1, "R", 1)
-
-            pdf.set_font('DejaVu', '', 10)
-            
-            # Get room info and calculate nights
-            rooms = get_all_rooms()
-            room_info = next((r for r in rooms if r['id'] == self.current_checkout['room_id']), None)
-            
-            room_type_display = room_info.get('type', 'N/A') if room_info else 'N/A'
-            
-            try:
-                arrival_date_dt = datetime.strptime(self.checkout_arrival.text(), '%Y-%m-%d')
-                departure_date_dt = datetime.strptime(self.checkout_actual_departure.date().toString('yyyy-MM-dd'), '%Y-%m-%d')
-                nights = (departure_date_dt - arrival_date_dt).days
-                if nights <= 0:
-                    nights = MIN_NIGHTS
-            except ValueError as e:
-                logger.error(f"Error calculating nights for receipt: {str(e)}")
-                nights = MIN_NIGHTS
-
-            # Get room rate
-            rates = get_room_rates()
-            room_rate = Decimal(str(next((r['night_rate'] for r in rates if r['room_type'] == room_type_display), Decimal('0'))))
-            
-            room_charges = Decimal(str(nights)) * room_rate
-
-            pdf.cell(room_type_col_width, 8, room_type_display, 1, 0, "L")
-            pdf.cell(nights_col_width, 8, str(nights), 1, 0, "C")
-            pdf.cell(rate_col_width, 8, f"{float(room_rate):.2f}", 1, 0, "R")
-            pdf.cell(total_col_width, 8, f"{float(room_charges):.2f}", 1, 1, "R")
-            pdf.ln(2)
+            # pdf.set_font('segoeui', 'B', 12)
+            # pdf.cell(0, 10, "Stay Details:", 0, 1, "L")
+            # pdf.set_fill_color(200, 220, 255)
+            # pdf.set_text_color(0, 0, 0)
+            # pdf.set_font('segoeui', 'B', 10)
+            # 
+            # # Calculate column widths for Stay Details table (occupy 100% width)
+            # room_type_col_width = page_width * 0.4
+            # nights_col_width = page_width * 0.2
+            # rate_col_width = page_width * 0.2
+            # total_col_width = page_width * 0.2
+            #
+            # pdf.cell(room_type_col_width, 8, "Room Type", 1, 0, "L", 1)
+            # pdf.cell(nights_col_width, 8, "Nights", 1, 0, "C", 1)
+            # pdf.cell(rate_col_width, 8, "Rate (MAD)", 1, 0, "R", 1)
+            # pdf.cell(total_col_width, 8, "Total (MAD)", 1, 1, "R", 1)
+            #
+            # pdf.set_font('segoeui', '', 10)
+            #
+            # # Get room info and calculate nights
+            # rooms = get_all_rooms()
+            # room_info = next((r for r in rooms if r['id'] == self.current_checkout['room_id']), None)
+            #
+            # room_type_display = room_info.get('type', 'N/A') if room_info else 'N/A'
+            #
+            # try:
+            #     arrival_date_dt = datetime.strptime(self.checkout_arrival.text(), '%Y-%m-%d')
+            #     departure_date_dt = datetime.strptime(self.checkout_actual_departure.date().toString('yyyy-MM-dd'), '%Y-%m-%d')
+            #     nights = (departure_date_dt - arrival_date_dt).days
+            #     if nights <= 0:
+            #         nights = MIN_NIGHTS
+            # except ValueError as e:
+            #     logger.error(f"Error calculating nights for receipt: {str(e)}")
+            #     nights = MIN_NIGHTS
+            #
+            # # Get room rate
+            # rates = get_room_rates()
+            # room_rate = Decimal(str(next((r['night_rate'] for r in rates if r['room_type'] == room_type_display), Decimal('0'))))
+            #
+            # # Check if guest was marked for company billing during check-in
+            # guest_data = get_guest(self.current_checkout['guest_id'])
+            # is_company_billing = guest_data and guest_data.get('company_id') and self.current_checkout.get('bill_to_company', False)
+            #
+            # if is_company_billing:
+            #     # Show a single row with 0s and a note
+            #     pdf.cell(room_type_col_width, 8, room_type_display, 1, 0, "L")
+            #     pdf.cell(nights_col_width, 8, "0", 1, 0, "C")
+            #     pdf.cell(rate_col_width, 8, "0.00", 1, 0, "R")
+            #     pdf.cell(total_col_width, 8, "0.00", 1, 1, "R")
+            #     pdf.set_font('segoeui', '', 9)
+            #     pdf.cell(0, 8, "Room charges billed to company", 0, 1, "L")
+            #     pdf.set_font('segoeui', '', 10)
+            # else:
+            #     # Normal row
+            #     pdf.cell(room_type_col_width, 8, room_type_display, 1, 0, "L")
+            #     pdf.cell(nights_col_width, 8, str(nights), 1, 0, "C")
+            #     pdf.cell(rate_col_width, 8, f"{float(room_rate):.2f}", 1, 0, "R")
+            #     pdf.cell(total_col_width, 8, f"{float(room_charges):.2f}", 1, 1, "R")
+            # pdf.ln(2)
 
             # --- Additional Services Table ---
             extra_services = self.safe_db_operation(get_booking_services, self.current_checkout['id'])
             if extra_services:
-                pdf.set_font('DejaVu', 'B', 12)
+                pdf.set_font('segoeui', 'B', 12)
                 pdf.cell(0, 10, "Additional Services:", 0, 1, "L")
                 pdf.set_fill_color(200, 220, 255)
                 pdf.set_text_color(0, 0, 0)
-                pdf.set_font('DejaVu', 'B', 10)
+                pdf.set_font('segoeui', 'B', 10)
 
                 # Calculate column widths for Additional Services table (occupy 100% width)
                 service_col_width = page_width * 0.4
@@ -1930,73 +1995,118 @@ class CheckInWidget(QWidget):
                 unit_price_col_width = page_width * 0.2
                 total_service_col_width = page_width * 0.2
 
-                pdf.cell(service_col_width, 8, "Service", 1, 0, "L", 1)
+                pdf.cell(service_col_width, 8, "Service / item", 1, 0, "L", 1)
                 pdf.cell(quantity_col_width, 8, "Quantity", 1, 0, "C", 1)
                 pdf.cell(unit_price_col_width, 8, "Unit Price (MAD)", 1, 0, "R", 1)
                 pdf.cell(total_service_col_width, 8, "Total (MAD)", 1, 1, "R", 1)
 
-                pdf.set_font('DejaVu', '', 10)
+                pdf.set_font('segoeui', '', 10)
                 for service in extra_services:
                     pdf.cell(service_col_width, 8, service['service_name'], 1, 0, "L")
                     pdf.cell(quantity_col_width, 8, str(service['quantity']), 1, 0, "C")
-                    pdf.cell(unit_price_col_width, 8, f"{float(Decimal(str(service['unit_price_at_time_of_charge']))):.2f}", 1, 0, "R")
-                    pdf.cell(total_service_col_width, 8, f"{float(Decimal(str(service['total_charge']))):.2f}", 1, 1, "R")
+                    pdf.cell(unit_price_col_width, 8, f"{format_number_with_spaces(float(Decimal(str(service['unit_price_at_time_of_charge']))))}", 1, 0, "R")
+                    pdf.cell(total_service_col_width, 8, f"{format_number_with_spaces(float(Decimal(str(service['total_charge']))))}", 1, 1, "R")
                 pdf.ln(2)
 
             # --- Totals (Right Aligned Below Tables) ---
             additional_charges = Decimal(self.checkout_additional_charges.text().replace('MAD ', '').strip() or '0')
-            subtotal = room_charges + additional_charges
+            # subtotal = room_charges + additional_charges  # Exclude room_charges
+            subtotal = additional_charges  # Only services
             
             # Get selected tax details for display and calculation
             selected_tax = self.checkout_tax_select.currentData()
             tax_amount = Decimal('0')
-            tax_display_name = "N/A"
 
             if selected_tax:
                 taxable_base = Decimal('0')
-                if selected_tax.get('apply_to_rooms', False):
-                    taxable_base += room_charges
+                # if selected_tax.get('apply_to_rooms', False):
+                #     taxable_base += room_charges  # Exclude room_charges
                 if selected_tax.get('apply_to_services', False):
                     taxable_base += additional_charges
 
                 if selected_tax['tax_type'] == 'percentage':
                     percentage = Decimal(str(selected_tax.get('percentage', 0))) / Decimal('100')
                     tax_amount = taxable_base * percentage
-                    # tax_display_name = f"{selected_tax['name']} ({float(selected_tax.get('percentage', 0)):.0f}%)"
                 elif selected_tax['tax_type'] == 'fixed':
                     tax_amount = Decimal(str(selected_tax.get('amount', 0)))
-                    # tax_display_name = f"{selected_tax['name']} (Fixed)"
             
             total_amount = subtotal + tax_amount
 
             pdf.set_x(pdf.l_margin + page_width * 0.6) # Move to 60% of the page width
-            pdf.set_font('DejaVu', '', 10)
+            pdf.set_font('segoeui', '', 10)
             pdf.cell(page_width * 0.2, 8, "Subtotal:", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"{float(subtotal):.2f} MAD", 1, 1, "R")
+            pdf.cell(page_width * 0.2, 8, f"{format_number_with_spaces(float(subtotal))} MAD", 1, 1, "R")
 
             pdf.set_x(pdf.l_margin + page_width * 0.6)
             pdf.cell(page_width * 0.2, 8, f"TAX", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"MAD {float(tax_amount):.2f}", 1, 1, "R")
+            pdf.cell(page_width * 0.2, 8, f"{format_number_with_spaces(float(tax_amount))} MAD", 1, 1, "R")
             
             pdf.set_x(pdf.l_margin + page_width * 0.6)
-            pdf.set_font('DejaVu', 'B', 12) # Bold font for total due
+            pdf.set_font('segoeui', 'B', 11) # Bold font for total due
             pdf.cell(page_width * 0.2, 8, "Total Due:", 1, 0, "L")
-            pdf.cell(page_width * 0.2, 8, f"{float(total_amount):.2f} MAD", 1, 1, "R")
-            pdf.ln(20)
+            pdf.cell(page_width * 0.2, 8, f"{format_number_with_spaces(float(total_amount))} MAD", 1, 1, "R")
+            pdf.ln(5)
+
+            from num2words import num2words
+
+            int_part, dec_part = str(total_amount).split('.')
+
+            int_part_clean = int_part.replace(" ", "")
+            dec_part_clean = dec_part.replace(" ", "")
+
+            int_words = num2words(int_part_clean, lang="en")
+            dec_words = num2words(dec_part_clean, lang="en")
+            if int(dec_part_clean) == 0: # Use dec_part_clean here
+                total_words = f"{int_words} dirhams"
+            else:
+                total_words = f"{int_words} dirhams," + " et ".lower() + f"{dec_words} centimes"
+            
+            pdf.multi_cell(page_width, 5, f"This invoice has been finalized in the amount of {total_words}.", 0, "L")
+
+            pdf.set_font('segoeui', '', 11)
+            pdf.ln(2)
+            footer_text = "Payment is due upon receipt. We accept cash, credit card, and bank transfers."
+            pdf.multi_cell(0, 5, footer_text, 0, "L")
+
+
+
+
+            # ----------------------------------- F O O T E R -----------------------------------------
+            pdf.set_font('segoeui', '', 11)
+            
+            pdf.set_draw_color(0, 0, 0)
+            pdf.set_y(pdf.h - pdf.b_margin - 34)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.ln(1)
+
+            pdf.cell(0, 5, "Relevé d'Identité Bancaire (RIB): 101 566 2121114709320005 67 - Banque Populaire", 0, 1, "C")
+            pdf.cell(0, 5, "Identifiant Commun de l'Entreprise (ICE): 001743O83000092", 0, 1, "C")
+            pdf.cell(0, 5, "Patente: 457700803", 0, 1, "C")
+            pdf.cell(0, 5, "Identifiant Fiscal (IF): 6590375", 0, 1, "C")
+            pdf.cell(0, 5, "Registre de Commerce (RC): 12/58", 0, 1, "C")
+
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.ln(1)
+
+            pdf.set_font('segoeui', 'B', 9)
+            pdf.multi_cell(0, 5, "Thank you for choosing HOTEL KISSAN AGDZ. We appreciate your business.", 0, "C")
+
+
+
 
             # --- Client Signature ---
-            pdf.set_font('DejaVu', '', 10)
-            pdf.cell(0, 5, "_________________________", 0, 1, "R")
-            pdf.cell(0, 5, "Client Signature", 0, 1, "R")
-            pdf.ln(20)
+            # pdf.set_font('segoeui', '', 10)
+            # pdf.cell(0, 5, "_________________________", 0, 1, "R")
+            # pdf.cell(0, 5, "Client Signature", 0, 1, "R")
+            # pdf.ln(20)
 
             # --- Footer with Divider ---
             # Calculate footer height and position it at the very bottom
-            footer_text = "Payment is due upon receipt. We accept cash, credit card, and bank transfers.\nThank you for choosing Grand Oasis Hotel. We hope to see you again soon!"
+            # footer_text = "Payment is due upon receipt. We accept cash, credit card, and bank transfers.\nThank you for choosing Hotel KISSAN Agdz. We hope to see you again soon!"
             
             # Calculate the height of the multi_cell for the footer text
             # This requires setting the font first to get the correct string_width.
-            pdf.set_font('DejaVu', '', 10)
+            # pdf.set_font('segoeui', '', 10)
             # Use pdf.get_string_width to estimate line breaks for multi_cell
             # A rough estimate of lines for multi_cell (page_width / font_size_factor)
             # For 2 lines, it's roughly 2 * line_height (5mm) = 10mm
@@ -2016,37 +2126,27 @@ class CheckInWidget(QWidget):
             
             # Calculate the y-coordinate where the footer content should *start*
             # This ensures the footer is flush with the bottom margin.
-            footer_content_height = 15 # Estimated height of the footer text and line break
-            footer_start_y = pdf.h - pdf.b_margin - footer_content_height
-
-            # Set current Y position explicitly to place the footer at the bottom
-            pdf.set_y(footer_start_y)
-
-            pdf.set_draw_color(0, 0, 0) # Black line
-            # Draw line across the page width
-            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y()) # Draw a horizontal line
-            pdf.ln(5) # Small line break after the divider
-
-            pdf.set_font('DejaVu', '', 10)
-            pdf.multi_cell(0, 5, footer_text, 0, "C")
-            # Removed final pdf.ln(10) as positioning is now explicit.
-
-            # Define the output PDF file path
-            output_pdf_file = os.path.join(RECEIPTS_DIR, f"checkout_receipt_{self.current_checkout['checkin_id']}.pdf")
+            # footer_content_height = 15
+            
+            # # Draw a horizontal line
+            # pdf.line(pdf.l_margin, pdf.h - pdf.b_margin - footer_content_height, 
+            #         pdf.w - pdf.r_margin, pdf.h - pdf.b_margin - footer_content_height)
+            
+            # Add some space after the line
+            # pdf.ln(5)
+            
+            # # Add footer text
+            # pdf.multi_cell(0, 5, footer_text, 0, "C")
             
             # Save the PDF
-            pdf.output(output_pdf_file)
+            pdf.output(pdf_path)
             
-            # Verify the file was created
-            if not os.path.exists(output_pdf_file):
-                raise IOError("Failed to create PDF file")
-                
-            return output_pdf_file
-
+            return pdf_path
+            
         except Exception as e:
-            logger.error(f"Error generating PDF: {str(e)}")
+            logger.error(f"Error generating checkout receipt: {str(e)}")
             logger.error(traceback.format_exc())
-            QMessageBox.critical(self, "Error", f"Failed to generate invoice PDF: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to generate receipt: {str(e)}")
             return None
 
     def update_payment_amount(self):
